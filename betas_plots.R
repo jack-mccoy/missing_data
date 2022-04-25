@@ -15,7 +15,7 @@ source("functions.R")
 
 # where we're pulling data and storing plots 
 data_path <- "./"
-ests_path <- "./"
+ests_path <- "./impute_ests/"
 plot_path <- "./"
 
 # input files
@@ -97,7 +97,8 @@ beta_dist <- ggplot(data = beta_dt, aes(x = V1, group = month)) +
   theme(
     legend.position = c(0.8, 0.8),
     legend.box.background = element_rect(colour = "black"),
-    panel.grid = element_line(colour = "grey", size = 0.2)
+    panel.grid = element_line(colour = "grey", size = 0.2),
+    text = element_text(size = 20)
   ) 
 
 #===============================================================================
@@ -109,5 +110,4 @@ setwd(plot_path)
 
 # save
 ggsave(plot = beta_dist, filename = paste0("beta_dist.pdf"))
-
 

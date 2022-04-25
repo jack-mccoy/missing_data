@@ -12,7 +12,7 @@ library(zoo)
 # Hardcodes
 #===============================================================================
 
-data_dir <- "./"
+data_dir <- "./pcr_returns/"
 
 yrmons <- gsub(
   "[[:space:]]", "",
@@ -103,7 +103,7 @@ sd <- plot_base + geom_line(aes(y = ls_sd)) +
   ggtitle("Standard deviations")
 sharpe <- plot_base + geom_line(aes(y = ls_sharpe)) + 
   ylab("Annualized Sharpe ratio") +
-  ggtitle("Sharpe ratios")
+  ggtitle("Sharpe ratios from PCR")
 
 # Cumulative returns over time ----
 
@@ -140,4 +140,7 @@ out_grid <- marrangeGrob(
 ggsave(plot = out_grid, 
   filename = "pcr_sharpes.pdf",
   width = 6.5, height = 11, unit = "in")
+
+ggsave(plot = sharpe, filename = "pcr_sharpes_standalone.pdf",
+    width = 7, height = 6, unit = "in")
 
