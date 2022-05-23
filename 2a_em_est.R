@@ -52,12 +52,6 @@ if (grepl("\\.txt", opt$impute_vec)) {
 # Hardcodes
 #===============================================================================
 
-# Paths and files
-data_path <- "./"
-zipfile <- "signed_predictors_dl_wide.zip"
-
-tmp_dir <- "./"
-
 # Months to impute
 yrmons <- zoo::as.yearmon(paste0(month.abb, " ", opt$impute_yr))
 

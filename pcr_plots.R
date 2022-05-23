@@ -12,7 +12,7 @@ library(zoo)
 # Hardcodes
 #===============================================================================
 
-data_dir <- "./pcr_returns/"
+data_dir <- "./output/pcr_returns/"
 
 yrmons <- gsub(
   "[[:space:]]", "",
@@ -138,9 +138,9 @@ out_grid <- marrangeGrob(
 )
 
 ggsave(plot = out_grid, 
-  filename = "pcr_sharpes.pdf",
+  filename = "output/plots/pcr_sharpes.pdf",
   width = 6.5, height = 11, unit = "in")
 
-ggsave(plot = sharpe, filename = "pcr_sharpes_standalone.pdf",
+ggsave(plot = sharpe, filename = "output/plots/pcr_sharpes_standalone.pdf",
     width = 7, height = 6, unit = "in")
 

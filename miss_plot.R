@@ -14,7 +14,7 @@ source("functions.R")
 # Hardcodes
 #===============================================================================
 
-plot_path <- "./"
+plot_path <- "./output/plots/"
 
 dates <- as.yearmon(c("Jun 1990", "Jun 2000", "Jun 2010"))
 
