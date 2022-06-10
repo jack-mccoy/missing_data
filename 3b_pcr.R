@@ -71,7 +71,7 @@ source("functions.R")
 # Get prediction month from array iteration map
 #===============================================================================
 
-pred_mon <- as.yearmon(opt$iter_year + opt$iter_month - 1/12)
+pred_mon <- as.yearmon(opt$iter_year + opt$iter_month/12 - 1/12)
 
 #===============================================================================
 # Data pull

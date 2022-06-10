@@ -14,7 +14,7 @@ source("functions.R")
 # Hardcodes
 #===============================================================================
 
-plot_path <- "./"
+plot_path <- "./output/plots/"
 
 dates <- as.yearmon(c("Jun 1990", "Jun 2000", "Jun 2010"))
 
@@ -46,7 +46,7 @@ for (dd in 1:length(dates)) {
         rhs_vars = signals_keep,
         title = paste0("Missingness map, ", format(as.Date(dates[dd]), "%B %Y")))
     ggsave(plot = tmp, filename = paste0("missplot_", date_file, ".pdf"), 
-        width = 6, height = 5, unit = "in")
+        width = 7, height = 5, unit = "in")
     rm(tmp)
 }
 

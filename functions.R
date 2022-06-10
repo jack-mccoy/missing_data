@@ -660,7 +660,7 @@ missPlot <- function(data, rhs_vars, xlab = "Stock i.d.", ylab = "Anomaly",
   nas <- nas[, ..col_ind]
   nas[, firm_id := 1:nrow(nas)]
 
-  ratio <- nrow(nas)*1.5/(ncol(nas) - 1)
+  ratio <- nrow(nas)*1/(ncol(nas) - 1)
   nas_long <- melt(nas, id = "firm_id")
 
   miss_plot <- ggplot(data = nas_long, aes(x = firm_id, y = variable)) + 
@@ -677,11 +677,12 @@ missPlot <- function(data, rhs_vars, xlab = "Stock i.d.", ylab = "Anomaly",
       panel.grid.minor = element_blank(),
       panel.background = element_blank(),
       axis.text.y = element_text(size = rel(0.6)),
-      #legend.position = "none"
+      legend.position = "top"
+      #legend.box.background = element_rect(fill = "grey")
     ) +
     scale_x_continuous(expand = c(0,0)) +
-    ggtitle(title) + 
-    coord_fixed(ratio)
+    ggtitle(title)# + 
+    #coord_fixed(ratio)
   
   return(miss_plot)
 }

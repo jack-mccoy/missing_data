@@ -14,25 +14,28 @@ library(zoo) # yearmon convention is nice to work with here
 #===============================================================================
 
 option_list <- list(
-  optparse::make_option(c("--impute_yr"),
-    type = "numeric", default = as.integer(Sys.getenv("SGE_TASK_ID")),
-    help = "year of data to impute"),
-  optparse::make_option(c("--out_path"),
-    type = "character", 
-    default = "./",
-    help = "directory to store output to"),
-  optparse::make_option(c("--impute_vec"),
-    type = "character", default = "bm,mom6m",
-    help = "a comma-separated list of values or .txt file to scan"),
-  optparse::make_option(c("--maxiter"),
-    type = "numeric", default = 10000,
-    help = "a numeric value for the maximumum number of EM iterations"),
-  optparse::make_option(c("--tol"),
-    type = "numeric", default = 1e-6,
-    help = "a numeric value for the convergence check"),
-  optparse::make_option(c("--force_convergence", "-f"),
-    type = "logical", default = FALSE, action = "store_true",
-    help = "logical to override maxiter and run the EM procedure until it converges to tol")
+    optparse::make_option(c("--impute_yr"),
+        type = "numeric", default = as.integer(Sys.getenv("SGE_TASK_ID")),
+        help = "year of data to impute"),
+    optparse::make_option(c("--boxcox"),
+        type = "logical", default = FALSE, action = "store_true",
+        help = "logical to indicate if Box-Cox transformations should be done before imputing"),
+    optparse::make_option(c("--out_path"),
+        type = "character", 
+        default = "./",
+        help = "directory to store output to"),
+    optparse::make_option(c("--impute_vec"),
+        type = "character", default = "bm,mom6m",
+        help = "a comma-separated list of values or .txt file to scan"),
+    optparse::make_option(c("--maxiter"),
+        type = "numeric", default = 10000,
+        help = "a numeric value for the maximumum number of EM iterations"),
+    optparse::make_option(c("--tol"),
+        type = "numeric", default = 1e-6,
+        help = "a numeric value for the convergence check"),
+    optparse::make_option(c("--force_convergence", "-f"),
+        type = "logical", default = FALSE, action = "store_true",
+        help = "logical to override maxiter and run the EM procedure until it converges to tol")
 )
 
 opt_parser <- optparse::OptionParser(option_list = option_list)
@@ -51,12 +54,6 @@ if (grepl("\\.txt", opt$impute_vec)) {
 #===============================================================================
 # Hardcodes
 #===============================================================================
-
-# Paths and files
-data_path <- "./"
-zipfile <- "signed_predictors_dl_wide.zip"
-
-tmp_dir <- "./"
 
 # Months to impute
 yrmons <- zoo::as.yearmon(paste0(month.abb, " ", opt$impute_yr))
@@ -123,20 +120,26 @@ bctrans <- foreach::"%dopar%"(foreach::foreach(i = yrmons), {
         (signals_good) := lapply(.SD, function(x) {
           tryCatch(
             {
-                x <- winsorize(x, tail = 0.005) # 1% symmetric winsorization
-                params <- car::powerTransform(x, family = "bcnPower")
-                x <- scale(car::bcnPower(x, 
-                    lambda = params$lambda, gamma = params$gamma))
-                attributes(x) <- c(attributes(x), 
-                      list(
-                          'bcn:lambda' = params$lambda,
-                          'bcn:gamma' = params$gamma)
-                      )
+                if (opt$boxcox) {
+                    x <- winsorize(x, tail = 0.005) # 1% symmetric winsorization
+                    params <- car::powerTransform(x, family = "bcnPower")
+                    x <- scale(car::bcnPower(x, 
+                        lambda = params$lambda, gamma = params$gamma))
+                    attributes(x) <- c(attributes(x), 
+                          list(
+                              'bcn:lambda' = params$lambda,
+                              'bcn:gamma' = params$gamma)
+                          )
+                } else {
+                    x <- scale(winsorize(x, tail = 0.005))
+                    attributes(x) <- c(attributes(x), 
+                        list('bcn:lambda' = NA, 'bcn:gamma' = NA))
+                }
                 return(x)
             }, # if can't transform, just scale and winsor
             error = function(e) {
                 warning("A column did not get BC-transformed for ",
-                    as.character(i))
+                    as.character(i), " but BC transformation was specified")
                 x <- scale(winsorize(x, tail = 0.005))
                 attributes(x) <- c(attributes(x), 
                     list('bcn:lambda' = NA, 'bcn:gamma' = NA))
