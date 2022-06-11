@@ -1,18 +1,18 @@
-
-#===============================================================================
-# Packages
-#===============================================================================
+# (also downloads Chen-Zimmermann signals)
+#==============================================================================#
+# Packages ====
+#==============================================================================#
 
 library(data.table)
 library(getPass)
 library(RPostgres)
 library(zoo)
 
-#===============================================================================
-# Download
-#===============================================================================
+#==============================================================================#
+# Download CRSP ====
+#==============================================================================#
 
-# Download size and returns ----
+## Download size and returns ----
 
 wrds_user <- getPass::getPass("WRDS username: ")
 wrds_pass <- getPass::getPass("WRDS pass: ")
@@ -40,7 +40,7 @@ crspm <- as.data.table(DBI::dbGetQuery(wrds, "
 
 DBI::dbDisconnect(wrds)
 
-# Delisting returns ----
+## Delisting returns ----
 
 crspm[, # Adapted from Andrew's github code
     dlret := dplyr::case_when(
@@ -62,7 +62,7 @@ crspm[, # Adapted from Andrew's github code
     ret := dlret
 ]
 
-# Lastly, the signals that aren't in Andrew's master file ----
+## Lastly, the signals that aren't in Andrew's master file ----
 # Signals are SIGNED (higher signal ==> higher return)
 
 crsp_final <- crspm[, .(
@@ -79,9 +79,35 @@ crsp_final <- crspm[, .(
 # Memory
 rm(crspm)
 
-#===============================================================================
-# Output
-#===============================================================================
 
-fwrite(crsp_final, "crsp_data.csv")
+## Output ----
+fwrite(crsp_final, "../data/crsp_data.csv")
 
+
+#==============================================================================#
+# Download Chen-Zimmermann Data ====
+#==============================================================================#
+
+# root of March 2022 release on Gdrive
+pathRelease = 'https://drive.google.com/drive/folders/1O18scg9iBTiBaDiQFhoGxdn4FdsbMqGo'
+
+
+## dl signal documentation ====
+target_dribble = pathRelease %>% drive_ls() %>% 
+  filter(name=='SignalDoc.csv')
+
+drive_download(target_dribble, path = '../data/SignalDoc.csv', overwrite = T)
+
+## dl signals (except the crsp ones) ====
+
+# 2 gig dl, can take a few minutes
+# download
+target_dribble = pathRelease %>% drive_ls() %>% 
+  filter(name == 'Firm Level Characteristics') %>% drive_ls() %>% 
+  filter(name == 'Full Sets') %>% drive_ls() %>% 
+  filter(name == 'signed_predictors_dl_wide.zip') 
+dl = drive_download(target_dribble, path = '../data/deleteme.zip', overwrite = T)
+
+# unzip, clean up
+unzip('../data/deleteme.zip', exdir = '../data')
+file.remove('../data/deleteme.zip')
