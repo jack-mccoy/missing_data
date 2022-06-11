@@ -1,21 +1,21 @@
 
-#===============================================================================
-# Packages
-#===============================================================================
+#==============================================================================#
+# Packages ----
+#==============================================================================#
 
 library(data.table)
 library(optparse)
 library(zoo)
 
-#===============================================================================
-# Functions
-#===============================================================================
+#==============================================================================#
+# Functions ----
+#==============================================================================#
 
 source("functions.R")
 
-#===============================================================================
-# Hardcodes
-#===============================================================================
+#==============================================================================#
+# Hardcodes ----
+#==============================================================================#
 
 option_list <- list(
     optparse::make_option(c("--n_signals", "-n"),
@@ -35,12 +35,12 @@ option_list <- list(
 opt_parser <- optparse::OptionParser(option_list = option_list)
 opt <- optparse::parse_args(opt_parser)
 
-#===============================================================================
-# Read in data
-#===============================================================================
+#==============================================================================#
+# Read in data ----
+#==============================================================================#
 
 # Read in the signals we want 
-signals <- fread("signed_predictors_dl_wide.csv") 
+signals <- fread("../data/signed_predictors_dl_wide.csv") 
 setnames(signals, colnames(signals), tolower(colnames(signals)))
 
 # Ease of use
@@ -49,16 +49,17 @@ signals[, yyyymm := as.yearmon(as.Date(as.character(yyyymm*10 + 1), "%Y%m%d"))]
 # Filter to sample being used
 signals <- signals[opt$start_yr <= year(yyyymm) & year(yyyymm) <= opt$end_yr]
 
-crsp_data <- fread("crsp_data.csv")[, .SD, .SDcols = !c("ret", "me")]
+crsp_data <- fread("../data/crsp_data.csv")[, .SD, .SDcols = !c("ret", "me")]
 crsp_data[, yyyymm := as.yearmon(yyyymm)]
 
-#===============================================================================
-# Ensure we have all good variables
-#===============================================================================
+#==============================================================================#
+# Ensure we have all good variables ----
+#==============================================================================#
 
 signals <- merge(signals, crsp_data, by = c("permno", "yyyymm"))
 
 # Only want to use variables that we can work with in each month
+# (remove binary signals in an overly-general way)
 bad_cols <- as.character(melt(signals[, # Counts for each month
         lapply(.SD, function(x) length(unique(x[!is.na(x)]))),
         .SDcols = !c("permno", "yyyymm"),
