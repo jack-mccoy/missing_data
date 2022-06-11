@@ -2,13 +2,14 @@
 # "A" prefix indicates this is separate from the rest of the repo
 # Andrew 2022 05
 
-# helpful stackexchange entry
-# https://stats.stackexchange.com/questions/124538/how-to-generate-a-large-full-rank-random-correlation-matrix-with-some-strong-cor
 
 # Setup ====
 library(tidyverse)
 library(MASS)
 
+
+# random correlations based on Lewandowski et al 
+# https://stats.stackexchange.com/questions/124538/how-to-generate-a-large-full-rank-random-correlation-matrix-with-some-strong-cor
 random_corr = function(d, betaparam){
   P = matrix(0, nrow = d, ncol = d);           # storing partial correlations
   S = diag(d);
@@ -34,6 +35,64 @@ random_corr = function(d, betaparam){
   return = S
 }
 
+# function for simulating correlations and calculating pca and imputations
+simulate_slopes = function(
+    d = 75, betaparam = 2, nobs = 38, seed = 111, nsim = 20
+){
+  # nobs = number of observable signals used in each stock's imputation
+  
+  set.seed(seed)
+  
+  # simulate nsim times
+  for (simi in 1:nsim){
+    
+    # make random correlation matrix
+    corrmat = random_corr(d,betaparam)  
+    corrvec = corrmat[lower.tri(corrmat)] 
+    
+    # pca decomp
+    eig = eigen(corrmat)$values
+    pct_var = cumsum(eig)/d*100
+    
+    # slope distributions
+    iall = 1:d
+    for (i in 1:d){
+      iobs = iall[iall != i]
+      iobs = sample(iobs, nobs)
+      Cov = corrmat[i,iobs]
+      Sinv = solve(corrmat[iobs,iobs])
+      
+      if (i==1){
+        slopes = Cov %*% Sinv
+      } else{
+        slopes = c(slopes, Cov %*% Sinv)
+      }
+    }
+    
+    # store
+    if (simi == 1){
+      corrall = t(corrvec)
+      pct_all = pct_var
+      slopes_all = slopes
+      
+    } else {
+      
+      corrall = rbind(corrall, t(corrvec))
+      pct_all = rbind(pct_all, pct_var)
+      slopes_all = rbind(slopes_all, slopes)
+      
+    } # if simi == 1
+    
+    
+  } # for simi
+  
+  dat = list(
+    corr = corrall, pct_var = pct_all, slopes = slopes_all
+  )
+  
+  return = dat
+  
+} # function simulate_slopes
 
 ## Figures Setup ====
 library(gridExtra)
@@ -72,67 +131,22 @@ chen_theme =   theme_minimal() +
   ) 
 
 
-# do stuff ====
-d = 75
-betaparam = 2
-nobs = 38 # number of observable signals used in each stock's imputation
-seed = 111
-set.seed(seed)
-nsim = 20
 
-# simulate nsim times
-for (simi in 1:nsim){
-  
-  # make random correlation matrix
-  corrmat = random_corr(d,betaparam)  
-  corrvec = corrmat[lower.tri(corrmat)] 
-  
-  # pca decomp
-  eig = eigen(corrmat)$values
-  pct_var = cumsum(eig)/d*100
-  
-  # slope distributions
-  iall = 1:d
-  for (i in 1:d){
-    iobs = iall[iall != i]
-    iobs = sample(iobs, nobs)
-    Cov = corrmat[i,iobs]
-    Sinv = solve(corrmat[iobs,iobs])
-    
-    if (i==1){
-      slopes = Cov %*% Sinv
-    } else{
-      slopes = c(slopes, Cov %*% Sinv)
-    }
-  }
-  
-  # store
-  if (simi == 1){
-    corrall = t(corrvec)
-    pct_all = pct_var
-    slopes_all = slopes
-    
-  } else {
-    
-    corrall = rbind(corrall, t(corrvec))
-    pct_all = rbind(pct_all, pct_var)
-    slopes_all = rbind(slopes_all, slopes)
-    
-  } # if simi == 1
-  
+# Sim + Plots ====
 
-} # for simi
+p_width = 4
+p_height = 1.3
+p_scale = 3
 
+## Low Dim Simulation ====
 
+# simulate data
+dat = simulate_slopes(betaparam = 1.2)
 
-# Plot ====
-
-
-PCmax = 10
 
 # correlation histogram
 edge = seq(-1,1,0.1)
-temp = hist(corrall, edge)
+temp = hist(dat$corr, edge)
 hdat = tibble(
   cmid = temp$mids, freq = temp$counts / sum(temp$counts)
 )
@@ -142,8 +156,9 @@ p_corr = ggplot(hdat, aes(x=cmid, y=freq)) +
   chen_theme
 
 # PC decomp
+PCmax = 10
 pca_dat = tibble(
-  num_PCs = 1:d, pct_explained = apply(pct_all, 2, mean) 
+  num_PCs = 1:d, pct_explained = apply(dat$pct_var, 2, mean) 
 )
 
 p_pca = ggplot(
@@ -152,11 +167,12 @@ p_pca = ggplot(
   geom_line() +
   chen_theme +
   labs(x = 'Number of PCs', y = 'Pct Var Explained')  +
-  scale_x_continuous(breaks = seq(1, 9 ,2))
+  scale_x_continuous(breaks = seq(1, 9 ,2)) +
+  coord_cartesian(ylim = c(0,100))
 
 # Imputation Slopes
-edge = c(-1e4, seq(-5,5,0.5), 1e4)
-temp = hist(slopes_all, edge)
+edge = c(-1e4, seq(-2,2,0.1), 1e4)
+temp = hist(dat$slopes, edge)
 hdat = tibble(
   mids = temp$mids, freq = temp$counts / sum(temp$counts)
 ) %>% 
@@ -166,7 +182,7 @@ hdat = tibble(
 
 p_slopes = ggplot(hdat, aes(x=mids, y=freq)) +
   geom_bar(stat = 'identity', fill = 'gray') +
-  labs(x = 'Slope', y = 'Frequency') +
+  labs(x = 'Imputation Slope', y = 'Frequency') +
   chen_theme
 
 
@@ -174,21 +190,123 @@ p_all = grid.arrange(p_corr, p_pca, p_slopes, nrow = 1)
 
 
 ggsave(
-  plot = p_all, filename = '../output/demo-a.pdf'
-  , width = 4, height = 2.0, scale = 2.5, device = cairo_pdf
+  plot = p_all, filename = '../output/sim impute a.pdf'
+  , width = p_width, height = p_height, scale = p_scale, device = cairo_pdf
 )
 
-# ====
+
+
+## Med Dim Simulation ====
+
+# simulate data
+dat = simulate_slopes(betaparam = 4)
+
+
+# correlation histogram
+edge = seq(-1,1,0.1)
+temp = hist(dat$corr, edge)
+hdat = tibble(
+  cmid = temp$mids, freq = temp$counts / sum(temp$counts)
+)
+p_corr = ggplot(hdat, aes(x=cmid, y=freq)) +
+  geom_bar(stat = 'identity', fill = 'gray') +
+  labs(x = 'Correlation', y = 'Frequency') +
+  chen_theme
+
+# PC decomp
+PCmax = 10
+pca_dat = tibble(
+  num_PCs = 1:d, pct_explained = apply(dat$pct_var, 2, mean) 
+)
+
+p_pca = ggplot(
+  pca_dat %>% filter(num_PCs <= PCmax), aes(x=num_PCs, y = pct_explained)
+) +
+  geom_line() +
+  chen_theme +
+  labs(x = 'Number of PCs', y = 'Pct Var Explained')  +
+  scale_x_continuous(breaks = seq(1, 9 ,2)) +
+  coord_cartesian(ylim = c(0,100))
+
+# Imputation Slopes
+edge = c(-1e4, seq(-2,2,0.1), 1e4)
+temp = hist(dat$slopes, edge)
+hdat = tibble(
+  mids = temp$mids, freq = temp$counts / sum(temp$counts)
+) %>% 
+  filter(
+    abs(mids) <= 10
+  )
+
+p_slopes = ggplot(hdat, aes(x=mids, y=freq)) +
+  geom_bar(stat = 'identity', fill = 'gray') +
+  labs(x = 'Imputation Slope', y = 'Frequency') +
+  chen_theme
+
+
+p_all = grid.arrange(p_corr, p_pca, p_slopes, nrow = 1)
+
+
+ggsave(
+  plot = p_all, filename = '../output/sim impute b.pdf'
+  , width = p_width, height = p_height, scale = p_scale, device = cairo_pdf
+)
 
 
 
+## High Dim Simulation ====
 
-# eigenvalues
-
-plot(pct_var[1:10])
-
-
+# simulate data
+dat = simulate_slopes(betaparam = 40)
 
 
-slopes = slopes[abs(slopes)<=20]
-hist(slopes,20)
+# correlation histogram
+edge = seq(-1,1,0.1)
+temp = hist(dat$corr, edge)
+hdat = tibble(
+  cmid = temp$mids, freq = temp$counts / sum(temp$counts)
+)
+p_corr = ggplot(hdat, aes(x=cmid, y=freq)) +
+  geom_bar(stat = 'identity', fill = 'gray') +
+  labs(x = 'Correlation', y = 'Frequency') +
+  chen_theme
+
+# PC decomp
+PCmax = 10
+pca_dat = tibble(
+  num_PCs = 1:d, pct_explained = apply(dat$pct_var, 2, mean) 
+)
+
+p_pca = ggplot(
+  pca_dat %>% filter(num_PCs <= PCmax), aes(x=num_PCs, y = pct_explained)
+) +
+  geom_line() +
+  chen_theme +
+  labs(x = 'Number of PCs', y = 'Pct Var Explained')  +
+  scale_x_continuous(breaks = seq(1, 9 ,2)) +
+  coord_cartesian(ylim = c(0,100))
+
+# Imputation Slopes
+edge = c(-1e4, seq(-2,2,0.1), 1e4)
+temp = hist(dat$slopes, edge)
+hdat = tibble(
+  mids = temp$mids, freq = temp$counts / sum(temp$counts)
+) %>% 
+  filter(
+    abs(mids) <= 10
+  )
+
+p_slopes = ggplot(hdat, aes(x=mids, y=freq)) +
+  geom_bar(stat = 'identity', fill = 'gray') +
+  labs(x = 'Imputation Slope', y = 'Frequency') +
+  chen_theme
+
+
+p_all = grid.arrange(p_corr, p_pca, p_slopes, nrow = 1)
+
+ggsave(
+  plot = p_all, filename = '../output/sim impute c.pdf'
+  , width = p_width, height = p_height, scale = p_scale, device = cairo_pdf
+)
+
+
