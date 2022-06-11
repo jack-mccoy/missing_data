@@ -60,14 +60,14 @@ source("functions.R")
 #===============================================================================
 
 # Read in the signals 
-signals <- fread("signed_predictors_dl_wide.csv") 
+signals <- fread("../data/signed_predictors_dl_wide.csv") 
 setnames(signals, colnames(signals), tolower(colnames(signals)))
 
 # Ease of use
 signals[, yyyymm := as.yearmon(as.Date(as.character(yyyymm*10 + 1), "%Y%m%d"))]
 
 # Read in the other data from CRSP 
-crsp_data <- fread("crsp_data.csv")
+crsp_data <- fread("../data/crsp_data.csv")
 crsp_data[, yyyymm := as.yearmon(yyyymm)]
 
 signals <- merge(signals, crsp_data, by = c("permno", "yyyymm"))[, 

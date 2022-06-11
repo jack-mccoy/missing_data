@@ -81,7 +81,7 @@ pred_mon <- as.yearmon(opt$iter_year + opt$iter_month/12 - 1/12)
 signals <- fread(opt$data_file)
 setnames(signals, colnames(signals), tolower(colnames(signals))) # ensure lower
 
-crsp_data <- fread("crsp_data.csv")[, .(permno, yyyymm, ret, me)]
+crsp_data <- fread("../data/crsp_data.csv")[, .(permno, yyyymm, ret, me)]
 signals <- merge(signals, crsp_data, by = c("permno", "yyyymm"))
 
 # Memory
