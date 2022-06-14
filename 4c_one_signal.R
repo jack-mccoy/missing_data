@@ -1,6 +1,7 @@
 # one signal strategies.  Created 2022 06 Andrew
 
 # Environment ----
+rm(list = ls())
 library(data.table)
 library(tidyverse)
 library(ggplot2)
@@ -123,14 +124,26 @@ for (imp_type in c('simple','mvn')){
 
 ret_var = 'bh1m_ew'
 
-# create long short strategies, removing if not enough stocks
-dat_ls = dat_all %>%
-  rename(
-    bh1m = all_of(ret_var)
+# find bad signal-dates (not enough stocks in the simple imp_type)
+bad_signal_dates = dat_all %>% 
+  filter(imp_type == 'simple') %>% 
+  pivot_wider(
+    id_cols = c(yyyymm,signalname), names_from = port, values_from = nstock
   ) %>% 
-  select(
-    imp_type, signalname, yyyymm, port, bh1m, nstock
+  mutate(
+    bad = if_else(long == 500 & short == 500, 0 , 1)
   ) %>% 
+  select(yyyymm,signalname,bad)
+
+
+
+# reorganize data
+# and create long short strategies, flagging signal-dates if not enough observations 
+dat_ls = dat_all %>% 
+  pivot_longer(
+    cols = starts_with('bh1m'), names_prefix = 'bh1m_'
+    , names_to = 'sweight', values_to = 'bh1m'
+  )%>% 
   pivot_wider(
     names_from = port, values_from = c('bh1m','nstock')
   ) %>% 
@@ -139,12 +152,19 @@ dat_ls = dat_all %>%
   ) %>% 
   filter(
     nstock_long == nstock_per_leg, nstock_short == nstock_per_leg
-  )
+  ) %>% 
+  left_join(
+    bad_signal_dates, by = c('yyyymm','signalname')
+  ) 
+
+# check how many are bad
+mean(dat_ls$bad)
 
 
-# summarize by imp_type, signalname
+# summarize by sweight, imp_type, signalname
 signal_sum = dat_ls %>% 
-  group_by(imp_type, signalname) %>% 
+  filter(bad == 0) %>% 
+  group_by(sweight, imp_type, signalname) %>% 
   summarize(
     rbar = mean(bh1m_ls)*12
     , vol = sd(bh1m_ls)*sqrt(12)    
@@ -171,6 +191,7 @@ signal_sum_wide = signal_sum %>%
 # summary stats
 qlist = c(0.05, 0.10, 0.25, 0.5, 0.75, 0.90, 0.95)
 imp_sum = signal_sum_wide %>% 
+  group_by(sweight) %>% 
   summarize(
     percentile = qlist*100
     , blank = NA*qlist
@@ -181,8 +202,21 @@ imp_sum = signal_sum_wide %>%
     , sr_mvn = quantile(sr_mvn, qlist)    
     , sr_simple = quantile(sr_simple, qlist)
     , sr_mvn_less_simple = quantile(sr_diff, qlist)
-  ) %>% 
-  t()
+    , blank3 = NA*qlist    
+  ) 
+
+# reorganize
+imp_sum2 = imp_sum %>% 
+  filter(sweight == 'ew') %>% 
+  t() %>% 
+  rbind(
+    imp_sum %>% 
+      filter(sweight == 'vw') %>% 
+      t() 
+  )
+
+imp_sum2
+
+write.csv(imp_sum2, file = '../output/one_signal.csv' )
 
 
-write.csv(imp_sum, file = '../output/one_signal.csv' )
