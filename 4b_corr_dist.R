@@ -78,6 +78,7 @@ small %>% names()
   
 # find correlations  
 cor_dat = data.table()
+eig_dat = data.table()
 for (keyi in 1:dim(keylist)[1]){
   
   # select data
@@ -95,6 +96,10 @@ for (keyi in 1:dim(keylist)[1]){
   cmat = cor(signalmat, use = 'pairwise.complete')
   clist = cmat[lower.tri(cmat)]
   
+  # calc eigendecomp
+  eig = eigen(cmat)$values
+  pct_var = cumsum(eig)/length(eig)*100
+  
   # organize
   dt_curr = data.table(
     imp_type = imp_curr
@@ -102,11 +107,21 @@ for (keyi in 1:dim(keylist)[1]){
     , cor = clist
   )
   
+  dt2_curr = data.table(
+    imp_type = imp_curr
+    , date = date_curr 
+    , n_PC = 1:length(eig)
+    , pct_var = pct_var
+  )
+  
   cor_dat = rbind(cor_dat, dt_curr)
+  eig_dat = rbind(eig_dat, dt2_curr)
   
 } # for keyi
 
 
+
+# plot ----
 
 # histogram data
 edge = seq(-1,1,0.1)
@@ -124,10 +139,19 @@ histdat = cor_dat %>%
     )
   )
 
-# plots
+eig_dat = eig_dat %>% 
+  mutate(
+    imp_type = factor(
+      imp_type 
+      , levels = c('mvn','none')
+      , labels = c('MVN Imputed','Obs Avail Case')
+    )
+  )
+
+
 for (date_curr in datelist){
   
-  
+  ## corr dist ----
   p = ggplot(histdat %>% filter(date == date_curr), aes(x=mids,y=density)) +
     geom_line(aes(group = imp_type, color = imp_type, linetype = imp_type), size = 2) +
     chen_theme +
@@ -147,6 +171,33 @@ for (date_curr in datelist){
     filename = paste0('../output/cor_dist_', floor(date_curr), '.pdf')
     , width = 5, height = 4, scale = 1.5, device = cairo_pdf
   )  
+  
+  # PCA ----
+  p2 = ggplot(
+    eig_dat %>% filter(date == date_curr, n_PC <= 10), aes(x=n_PC, y=pct_var)
+  ) +
+    geom_line(
+      aes(group = imp_type, color = imp_type, linetype = imp_type)
+    ) +
+    chen_theme +
+    xlab('Number of PCs') +
+    ylab('Frequency') +
+    theme(
+      legend.position = c(2.5,8)/10
+    ) +
+    scale_color_manual(
+      values=c(NICEBLUE, 'gray')
+    ) +
+    scale_linetype_manual(values = c('solid','31'))  +
+    labs(x = 'Number of PCs', y = 'Pct Var Explained')  +
+    scale_x_continuous(breaks = seq(1, 9 ,2)) +
+    coord_cartesian(ylim = c(0,100))
+  
+  ggsave(
+    filename = paste0('../output/pca_', floor(date_curr), '.pdf')
+    , width = 5, height = 4, scale = 1.5, device = cairo_pdf
+  )   
+
   
 } # for date_curr
 
