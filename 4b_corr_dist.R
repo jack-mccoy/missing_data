@@ -139,7 +139,7 @@ histdat = cor_dat %>%
     )
   )
 
-eig_dat = eig_dat %>% 
+eig_dat2 = eig_dat %>% 
   mutate(
     imp_type = factor(
       imp_type 
@@ -151,7 +151,7 @@ eig_dat = eig_dat %>%
 
 for (date_curr in datelist){
   
-  ## corr dist ----
+  # corr dist 
   p = ggplot(histdat %>% filter(date == date_curr), aes(x=mids,y=density)) +
     geom_line(aes(group = imp_type, color = imp_type, linetype = imp_type), size = 2) +
     chen_theme +
@@ -172,12 +172,13 @@ for (date_curr in datelist){
     , width = 5, height = 4, scale = 1.5, device = cairo_pdf
   )  
   
-  # PCA ----
+  # PCA 
   p2 = ggplot(
-    eig_dat %>% filter(date == date_curr, n_PC <= 10), aes(x=n_PC, y=pct_var)
+    eig_dat2 %>% filter(date == date_curr, n_PC <= 10), aes(x=n_PC, y=pct_var)
   ) +
     geom_line(
       aes(group = imp_type, color = imp_type, linetype = imp_type)
+      , size = 2
     ) +
     chen_theme +
     xlab('Number of PCs') +
