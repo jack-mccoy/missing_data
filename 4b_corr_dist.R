@@ -58,6 +58,7 @@ signals_mvn = fread('../data/imp_tmp.csv') %>%
 signals_obs = fread('../data/bc_tmp.csv') %>% 
   mutate(yyyymm = round(yyyymm, 3))
 
+
 ## select dates and make small dataset ----
 
 small = signals_mvn[yyyymm %in% datelist] %>% 
@@ -208,3 +209,26 @@ for (date_curr in datelist){
 # check expect share of missing values
 small %>% filter(imp_type == 'none') %>% summarize_all(function (x) mean(is.na(x)))
 small %>% filter(imp_type == 'mvn') %>% summarize_all(function (x) mean(is.na(x)))
+ 
+
+# Testing ----
+# eventually we should replace the sample correlation matricies with the ones directly 
+# from the imputation.
+
+# read cov matricies
+covmat = fread('../data/impute_ests/estR_Jun1990.csv') %>% 
+  select(-V1) %>% 
+  as.matrix
+rownames(covmat) = colnames(covmat)
+
+
+cormat = cov2cor(covmat)
+
+hist(cormat[lower.tri(cormat)])
+
+eig = eigen(cormat)$value
+
+plot(1:length(eig[1:20]), cumsum(eig[1:20]))
+
+
+
