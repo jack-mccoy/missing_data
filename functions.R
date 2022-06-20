@@ -71,7 +71,7 @@ boxCoxTransform <- function(x, fmla = x~1, param = "lambda",
 mvn_emf <- function(y, E0, R0, tol = 1e-6, maxiter = 1e3) {
   
   if (!is.loaded('mvn_emf')) {
-    dyn.load("/user/jpm2223/Documents/missing_data/mvn_emf.so")
+    dyn.load("mvn_emf.so")
   }
   
   N <- nrow(y)

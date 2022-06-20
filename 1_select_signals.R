@@ -71,8 +71,8 @@ bad_cols <- as.character(melt(signals[, # Counts for each month
         variable
     ])
 
-# Matrix of counts of unique observations, whole sample
-counts <- t(signals[, lapply(.SD, function(x) length(unique(x[!is.na(x)]))),
+# Matrix of counts of observations, whole sample
+counts <- t(signals[, lapply(.SD, function(x) sum(!is.na(x))),
     .SDcols = !c("permno", "yyyymm", bad_cols)])
 
 # Get first N in descending order of counts
