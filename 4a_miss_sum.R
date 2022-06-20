@@ -49,8 +49,24 @@ signaldoc = fread('../data/SignalDoc.csv')  %>%
 # Process ----
 #==============================================================================#
 
-# keep only continuous predictor signals
-signallist = signaldoc %>% filter(Cat.Signal == 'Predictor', Cat.Form =='continuous') %>% 
+# find binary signals
+templist = signaldoc %>% filter(Cat.Signal == 'Predictor', Cat.Form == 'discrete') %>% 
+  pull(signalname)
+binary_list = character()
+for (signalcur in templist){
+  tempdat = signals %>% 
+    select(signalcur) %>% 
+    filter(!is.na(!!as.name(signalcur))) %>% 
+    as.matrix
+  
+  if (unique(tempdat) <= 2 ){
+     binary_list = c(binary_list, signalcur)
+  }
+} # end for signalcur
+
+# keep only non-binary predictor signals
+signallist = signaldoc %>% 
+  filter(Cat.Signal == 'Predictor', !(signalname %in% binary_list) ) %>%   
   pull(signalname)
 
 small = signals %>% 
