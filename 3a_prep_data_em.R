@@ -80,7 +80,7 @@ signals <- merge(signals, crsp_data, by = c("permno", "yyyymm"))[,
 #==============================================================================#
 
 # Sequence of yearmons to impute
-yrmons <- seq(as.yearmon("Jan 1980"), as.yearmon("Dec 2018"), by = 1/12)
+yrmons <- seq(as.yearmon("Jan 1980"), as.yearmon("Dec 2020"), by = 1/12)
 
 doParallel::registerDoParallel(cores = parallel::detectCores())
 imputed <- foreach::"%dopar%"(foreach::foreach(i = yrmons), {
