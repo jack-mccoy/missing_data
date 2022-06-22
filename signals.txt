@@ -8,14 +8,10 @@ returnskew3f
 high52
 idiovolaht
 indmom
-pricedelayrsq
-pricedelayslope
 returnskew
 coskewness
-pricedelaytstat
 mom6m
 mom12moffseason
-coskewacx
 beta
 momseasonshort
 mom12m
@@ -73,3 +69,7 @@ investppeinv
 cboperprof
 pctacc
 earnsupbig
+indretbig
+varcf
+grsaletogrinv
+netdebtfinance
