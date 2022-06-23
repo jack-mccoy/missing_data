@@ -12,7 +12,7 @@ library(zoo)
 # Hardcodes
 #===============================================================================
 
-data_dir <- "./output/pcr_returns/"
+data_dir <- "../output/pcr_returns/"
 
 yrmons <- gsub(
   "[[:space:]]", "",
@@ -28,7 +28,7 @@ pcr_em <- list()
 for (i in yrmons) {
   ym <- as.yearmon(paste0(substr(i, 1, 3), " ", substr(i, 4, 7)))
   tryCatch(
-    {pcr_em[[i]] <- fread(paste0(data_dir, "pcr_", i, ".csv"))[, yyyymm := ym]},
+    {pcr_em[[i]] <- fread(paste0(data_dir, "pcr_em_", i, ".csv"))[, yyyymm := ym]},
     error = function(e) ""
   )
 }
@@ -60,7 +60,7 @@ pcr_all[
 
 # Combine all the data to get average returns and Sharpe ratio over time
 agg_data <- pcr_all[
-  pc <= 100, 
+  pc <= 50, # Only show up to 50 PCs
   .( # Get as annualized mean return and std. dev.
     ls_mn = mean(ls_ret, na.rm = T) * 12,
     ls_sd = sd(ls_ret, na.rm = T) * sqrt(12)
@@ -137,10 +137,11 @@ out_grid <- marrangeGrob(
   vp = grid::viewport(width = unit(5.5, "in"), height = unit(10, "in"))
 )
 
-ggsave(plot = out_grid, 
-  filename = "output/plots/pcr_sharpes.pdf",
-  width = 6.5, height = 11, unit = "in")
+ggsave(plot = mn, 
+  filename = "../output/plots/pcr_expected_rets.pdf",
+  width = 8, height = 6, unit = "in")
 
-ggsave(plot = sharpe, filename = "output/plots/pcr_sharpes_standalone.pdf",
-    width = 7, height = 6, unit = "in")
+ggsave(plot = sharpe, 
+  filename = "../output/plots/pcr_sharpes.pdf",
+  width = 8, height = 6, unit = "in")
 

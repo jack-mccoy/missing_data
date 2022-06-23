@@ -14,9 +14,9 @@ source("functions.R")
 #==============================================================================#
 
 # where we're pulling data and storing plots 
-data_path <- "./"
-ests_path <- "./output/impute_ests/"
-plot_path <- "./output/plots/"
+data_path <- "../data/"
+ests_path <- "../output/impute_ests/"
+plot_path <- "../output/plots/"
 
 # input files
 data_file <- paste0(data_path, "bc_tmp.csv")
@@ -105,9 +105,6 @@ beta_dist <- ggplot(data = beta_dt, aes(x = V1, group = month)) +
 # Output the plots
 #==============================================================================#
 
-# change to where project plots are stored 
-setwd(plot_path)
-
 # save
-ggsave(plot = beta_dist, filename = paste0("beta_dist.pdf"))
+ggsave(plot = beta_dist, filename = paste0(plot_path, "beta_dist.pdf"))
 
