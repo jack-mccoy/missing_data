@@ -8,4 +8,4 @@ Rscript --grid_submit=batch \
         --sample_end_year=2020 \
         --selection_year=1980 \
         --selection_month=6 \
-        -n 75
+        -n 100

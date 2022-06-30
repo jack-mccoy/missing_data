@@ -8,7 +8,7 @@ tmp_file_bc="../data/bc_tmp.csv"
 
 # Parameters for principal component regressions
 signals_file="signals.txt" # file with list of signals to use
-n_pcs=75 # number of PCs in maximal regression
+n_pcs=100 # number of PCs in maximal regression
 n_years=10 # number of years for principal components/predictive regs
 quantile_prob=0.1 # quantile to form long/short portfolios (0.1 means deciles)
 
