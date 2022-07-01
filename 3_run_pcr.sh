@@ -42,7 +42,7 @@ for _yr in `seq $start_yr $end_yr`; do
     Rscript --grid_submit=batch \
         --grid_hold=$jobid \
         --grid_ncpus=2 \
-        --grid_mem=500G \
+        --grid_mem=300G \
         --grid_SGE_TASK_ID=1-12 \
         --grid_email="jmccoy26@gsb.columbia.edu" \
         3b_pcr.R \
@@ -59,7 +59,7 @@ for _yr in `seq $start_yr $end_yr`; do
     Rscript --grid_submit=batch \
         --grid_hold=$jobid \
         --grid_ncpus=2 \
-        --grid_mem=500G \
+        --grid_mem=300G \
         --grid_SGE_TASK_ID=1-12 \
         --grid_email="jmccoy26@gsb.columbia.edu" \
         3b_pcr.R \
