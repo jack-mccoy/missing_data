@@ -79,8 +79,7 @@ rm(beta_lists, all_the_betas)
 beta_dist <- ggplot(data = beta_dt, aes(x = V1, group = month)) + 
   geom_density(aes(colour = month, linetype = month)) +
   labs(
-    title = paste0("Distribution of Imputation Betas"),
-    x = "Beta Value",
+    x = "Imputation Slope",
     y = "Density",
     color = "Month",
     linetype = "Month"
@@ -98,7 +97,7 @@ beta_dist <- ggplot(data = beta_dt, aes(x = V1, group = month)) +
     legend.position = c(0.8, 0.8),
     legend.box.background = element_rect(colour = "black"),
     panel.grid = element_line(colour = "grey", size = 0.2),
-    text = element_text(size = 20)
+    text = element_text(size = 15)
   ) 
 
 #==============================================================================#
