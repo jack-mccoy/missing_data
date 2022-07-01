@@ -7,6 +7,7 @@
 library(data.table)
 library(optparse)
 library(zoo)
+library(tidyverse)
 
 #==============================================================================#
 # Functions ----
@@ -137,7 +138,12 @@ econsum = doc3 %>% filter(best100_1985 == 1) %>%group_by(Cat.Economic) %>% summa
   print(n=100)
 
 
-keysignals = c('accruals','bmdec','mom12m','assetgrowth','earningssurprise', 'analystrevision', 'feps', 'gp','roaq')
+keysignals = c(
+  'accruals','bmdec','mom12m','assetgrowth'
+  ,'earningssurprise', 'analystrevision', 'feps'
+  , 'gp','roaq'
+  , 'smileslope', 'skew1'
+)
 
 keysum = doc3 %>% filter(signalname %in% keysignals) %>% 
   select(signalname, starts_with('best')) %>% 
