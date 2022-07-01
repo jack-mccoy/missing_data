@@ -73,6 +73,9 @@ source("functions.R")
 
 pred_mon <- as.yearmon(opt$iter_year + opt$iter_month/12 - 1/12)
 
+# Log file
+cat("PC regressions for ", as.character(pred_mon), "\n")
+
 #==============================================================================#
 # Data pull
 #==============================================================================#
