@@ -676,9 +676,9 @@ missPlot <- function(data, rhs_vars, xlab = "Stock i.d.", ylab = "Anomaly",
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
       panel.background = element_blank(),
-      axis.text.y = element_text(size = rel(0.6)),
-      legend.position = "top"
-      #legend.box.background = element_rect(fill = "grey")
+      axis.text.y = element_text(size = rel(0.5)),
+      legend.position = "bottom",
+      legend.background = element_rect(fill = "lightgrey")
     ) +
     scale_x_continuous(expand = c(0,0)) +
     ggtitle(title)# + 

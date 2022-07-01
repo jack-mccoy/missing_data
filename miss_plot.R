@@ -44,11 +44,9 @@ for (dd in 1:length(dates)) {
     date_file <- gsub(" ", "", dates[dd]) 
     tmp <- missPlot(dat[yyyymm == dates[dd]], 
         rhs_vars = signals_keep,
-        title = paste0("Missingness map, ", format(as.Date(dates[dd]), "%B %Y")))
+        title = "")
     ggsave(plot = tmp, filename = paste0("missplot_", date_file, ".pdf"), 
         width = 7, height = 5, unit = "in")
     rm(tmp)
 }
-
-
 

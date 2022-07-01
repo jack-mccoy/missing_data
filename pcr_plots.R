@@ -16,7 +16,7 @@ data_dir <- "../output/pcr_returns/"
 
 yrmons <- gsub(
   "[[:space:]]", "",
-  as.character(seq(as.yearmon("Jan 1990"), as.yearmon("Dec 2018"), by = 1/12))
+  as.character(seq(as.yearmon("Jan 1990"), as.yearmon("Dec 2020"), by = 1/12))
 )
 
 #===============================================================================
@@ -96,14 +96,11 @@ plot_base <- ggplot(agg_data, aes(x = pc, colour = weighting, linetype = type)) 
   )
 
 mn <- plot_base + geom_line(aes(y = ls_mn)) + 
-  ylab("Annualized mean return") +
-  ggtitle("Mean returns")
+  ylab("Annualized mean return")
 sd <- plot_base + geom_line(aes(y = ls_sd)) +
-  ylab("Annualized std. dev.") +
-  ggtitle("Standard deviations")
+  ylab("Annualized std. dev.")
 sharpe <- plot_base + geom_line(aes(y = ls_sharpe)) + 
-  ylab("Annualized Sharpe ratio") +
-  ggtitle("Sharpe ratios from PCR")
+  ylab("Annualized Sharpe ratio")
 
 # Cumulative returns over time ----
 
