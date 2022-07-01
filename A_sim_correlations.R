@@ -5,8 +5,6 @@
 
 # Setup ====
 library(tidyverse)
-library(MASS)
-
 
 # random correlations based on Lewandowski et al 
 # https://stats.stackexchange.com/questions/124538/how-to-generate-a-large-full-rank-random-correlation-matrix-with-some-strong-cor
@@ -134,6 +132,8 @@ chen_theme =   theme_minimal() +
 
 # Sim + Plots ====
 
+## settings ====
+d = 75
 p_width = 4
 p_height = 1.3
 p_scale = 3
@@ -257,7 +257,7 @@ ggsave(
 ## High Dim Simulation ====
 
 # simulate data
-dat = simulate_slopes(betaparam = 40)
+dat = simulate_slopes(betaparam = 10)
 
 
 # correlation histogram

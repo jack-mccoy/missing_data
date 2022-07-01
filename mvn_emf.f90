@@ -1,6 +1,13 @@
 ! homemade EM to estimate mean and variance subject to missing data
 ! Fortran version
 
+! in/outs 
+!	Ey = data / imputed data
+! 	estE = guessed mu, estimated mu
+!	estR = guessed Sigma, estimated Sigma
+! ins
+!	NAindex = indexes of missing values
+
 subroutine mvn_emf(Ey, estE, estR, NAindex, tol, maxiter, K, N)
 	
 implicit none
@@ -33,7 +40,7 @@ iterloop: do iter=1,maxiter
    lastNA=.false.
    
    
-   !compute means and variances for every observation (E-step)
+   ! ==== compute means and variances for every observation (E-step) ====
    iloop: do i=1,N
 
       NAcount=count(NAindex(i,:))
@@ -51,6 +58,14 @@ iterloop: do iter=1,maxiter
 
          thisNA=NAindex(i,:)
          if (any(thisNA .neqv. lastNA)) then !can save the below computations if missingness pattern is the same
+		 
+			! == prep calculations ==
+			! 1 suffix indicates observed
+			! 2 suffix indicates missing
+			! computes
+			!	slope: invR11R12' = R12'*inv(R11)
+			!	new variance: R22 := R22 + invR11R12'R12			
+			
             !set up indices            
             do j=1,K
                thisNA2(j,:)=thisNA(j) .and. thisNA
@@ -58,7 +73,7 @@ iterloop: do iter=1,maxiter
                thisData2(j,:)= (.not.thisNA(j)) .and. (.not.thisNA)
             end do
 
-            !re-allocatae
+            !re-allocate
             deallocate(E1,E2,R11,R12,R22,invR11R12)
             allocate(E1(K-NAcount),E2(NAcount))
             allocate(R11(K-NAcount,K-NAcount))
@@ -70,40 +85,67 @@ iterloop: do iter=1,maxiter
             R11=reshape(pack(estR,thisData2),(/K-NAcount,K-NAcount/))
             R12=reshape(pack(estR,thisDataNA),(/K-NAcount,NAcount/))
             R22=reshape(pack(estR,thisNA2),(/NAcount,NAcount/))
-            invR11R12=R12
-            call dposv('U',K-NAcount,NAcount,R11,K-NAcount,invR11R12,K-NAcount,info) !invR11R12=inv(R11)*R12
             
-            !compute variance of imputed data
-            call dgemm('T','N',NAcount,NAcount,K-NAcount,-1d0,invR11R12,K-NAcount,R12,K-NAcount,1d0,R22,NAcount) !R22=R22-invR11R12'*R12
+			!compute slope			
+			!solve for invR11R12 in R11*invR11R12 = R12 
+			!	arg 6 in dposv is in/out: in = R12, out = invR11R12 
+			invR11R12=R12 !arg 6 in dposv
+            call dposv('U',K-NAcount,NAcount,R11,K-NAcount,invR11R12,K-NAcount,info) 
+            
+            !compute new variance 
+			!R22 := invR11R12'*R12 + R22
+			!netlib notation: C := A**T*B + C		 
+			!    dgemm(TRA,TRB,M,     ,N       ,K       ,ALPHA,A       ,LDA      ,B  ,K        ,BETA,C ,LDC)
+            call dgemm('T','N',NAcount,NAcount,K-NAcount,-1d0,invR11R12,K-NAcount,R12,K-NAcount,1d0,R22,NAcount) 
          end if
 
-         !compute means of imputed data
-         E1=pack(Ey(i,:)-estE,.not.thisNA)
+		 ! == "impute" missing values ==		 
+		 ! impute with new means E2 :=  E2 + invR11R12'*E1 = E2 +  R12'*inv(R11)*E1
+		 ! i.e. Ey(i,thisNA) = estE(thisNA) + estR(thisDataNA)'*estR(thisData2)^-1*(Ey(i,.not.thisNA)-estE(.not.thisNA))
+         E1=pack(Ey(i,:)-estE,.not.thisNA) ! 
          E2=pack(estE,thisNA)
-         call dgemm('T','N',NAcount,1,K-NAcount,1d0,invR11R12,K-NAcount,E1,K-NAcount,1d0,E2,NAcount) !E2=E2-invR11R12'*E1
+		 ! netlib notation: C := A**T*B + C		 
+		 !    dgemm(TRA,TRB,M,     ,N,K        ,ALPHA,A        ,LDA      ,B ,K        ,BETA,C ,LDC)
+         call dgemm('T','N',NAcount,1,K-NAcount,1d0  ,invR11R12,K-NAcount,E1,K-NAcount,1d0 ,E2,NAcount) 
 
-         !assign means and variance of imputed data
+         ! == reshape obs and imputed values into full vector ====
+		 !	thisEy (1 x K) combines observed data in Ey(i,:) with means of missing data E2
          thisEy=Ey(i,:)
          thisEy=unpack(E2,thisNA,thisEy)
+		 
+		 ! == begin reshaping full second moment contribution ==
+		 ! first reshape the variance correction
+		 ! thisEyy (K x K) reshapes var of missing signals R22 to fit full model w/ 0s elsewhere, for now
+		 !		thisEyy will be added to thisEy*thisEy' shortly		 
          thisEyy=0
          thisEyy=unpack(reshape(R22,(/NAcount**2/)),thisNA2,thisEyy)
 
       end if
 
-      !add E^2[thisy] to V[thisy]
-      call dgemm('N','T',K,K,1,1d0,thisEy,K,thisEy,K,1d0,thisEyy,K) !thisEyy=thisEyy+thisEy*thisEy'
-      Ey(i,:)=thisEy
-      Eyy=Eyy+thisEyy/N
+	  ! == finish full second moment contribution ==	  
+      ! add imputed second moment to variance correction
+	  ! (note there is no correction if there are no missing values in the if statements above)
+	  ! thisEyy := thisEyy+thisEy*thisEy'
+      call dgemm('N','T',K,K,1,1d0,thisEy,K,thisEy,K,1d0,thisEyy,K) 
+	  
+	  ! update
+      Ey(i,:)=thisEy ! store full imputed dataset
+      Eyy=Eyy+thisEyy/N ! reduce second moment (each stock contributes thisEyy/N)
       lastNA=thisNA
 
    end do iloop
 
-   !update estimates (M-step)
+   ! ==== update estimates (M-step) ====
+   
+   ! Update mean 
    do j=1,K
       Enew(j)=sum(Ey(:,j))/N
    end do
+   
+   ! Update covariance
+   !Rnew := Eyy + Enew*Enew'
    Rnew=Eyy
-   call dgemm('N','T',K,K,1,-1d0,Enew,K,Enew,K,1d0,Rnew,K) !Rnew=Rnew-Enew*Enew'
+   call dgemm('N','T',K,K,1,-1d0,Enew,K,Enew,K,1d0,Rnew,K) 
 
    !check convergence
    Edist=maxval(abs(Enew-estE))
