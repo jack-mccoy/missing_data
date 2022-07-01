@@ -1,3 +1,4 @@
+# outputs signals_best100_1985.txt and signals_best100_full.txt
 
 #==============================================================================#
 # Packages ----
@@ -14,79 +15,130 @@ library(zoo)
 source("functions.R")
 
 #==============================================================================#
-# Hardcodes ----
+# Count stocks ----
 #==============================================================================#
 
-option_list <- list(
-    optparse::make_option(c("--n_signals", "-n"),
-        type = "numeric", default = 10,
-        help = "select first n signals in descending order of available observations"),
-    optparse::make_option(c("--sample_start_year"),
-        type = "numeric", default = 1980,
-        help = "start year of sample for analysis"),
-    optparse::make_option(c("--sample_end_year"),
-        type = "numeric", default = 2020,
-        help = "end year of sample for analysis"),
-    optparse::make_option(c("--signals_file"),
-        type = "character", default = "signals.txt",
-        help = "name of files listing signals to use for imputations (output)")
-)
+## read in data ====
+# doc
+doc = fread('../data/SignalDoc.csv') %>% 
+  rename(signalname = Acronym) %>% 
+  filter(
+    Cat.Signal == 'Predictor'
+  ) %>% 
+  select(signalname, starts_with('Cat'), -Cat.Signal) %>% 
+  mutate(
+    signalname = tolower(signalname)
+  ) 
 
-opt_parser <- optparse::OptionParser(option_list = option_list)
-opt <- optparse::parse_args(opt_parser)
+# portfolio dat (long only)
+portret = fread('../data/PredictorPortsFull.csv') %>% 
+  filter(port != 'LS') %>% 
+  mutate(signalname = tolower(signalname))
+
+# count stocks
+nstock = portret %>% 
+  group_by(signalname, date) %>% 
+  summarize(nstock = sum(Nlong)) %>% 
+  mutate(year = year(date))
+
+nstocksum = nstock %>% 
+  group_by(signalname,year) %>% 
+  summarize(nstock = mean(nstock)) 
+
+
+nstockselect = nstocksum %>% 
+  filter(
+    year %in% c(1980, 1985, 1990)
+  ) %>% 
+  pivot_wider(
+    names_from = year, names_prefix = 'nstock_', values_from = nstock
+  ) %>% 
+  left_join(
+    nstocksum %>% filter(year >= 1985, year <= 2020) %>% summarize(nstock_1985_2020 = mean(nstock))
+  )
+
+
+yearok = nstocksum %>% 
+  arrange(signalname, year) %>% 
+  filter(nstock >= 1000) %>% 
+  group_by(signalname) %>%   
+  filter(row_number() == 1) %>% 
+  transmute(signalname, year_n_gt_1000 = year)
+
+# merge
+doc2 = doc %>% 
+  left_join(yearok) %>% 
+  left_join(nstockselect) %>% 
+  mutate_at(vars(starts_with('nstock')), ~replace_na(.,0))
 
 #==============================================================================#
-# Read in data ----
+# Select signals ----
 #==============================================================================#
 
-# Read in the signals we want 
-signals <- fread("../data/signed_predictors_dl_wide.csv") 
-setnames(signals, colnames(signals), tolower(colnames(signals)))
 
-# Ease of use
-signals[, ":="(
-    yrmon = as.yearmon(as.Date(as.character(yyyymm*10 + 1), "%Y%m%d")),
-    yr = as.integer(substr(yyyymm, 1, 4)),
-    mon = as.integer(substr(yyyymm, 5, 6))
-)]
+# first remove discrete and coskewacx 
+#  coskewacx has some gaps due to some mysterious bug
+signallist0 = doc2 %>% 
+  filter(Cat.Form == 'continuous') %>% select(-Cat.Form) %>% 
+  filter(signalname != 'coskewacx') 
 
-crsp_data <- fread("../data/crsp_data.csv")[, .SD, .SDcols = !c("ret", "me")]
-crsp_data[, yrmon := as.yearmon(yyyymm)]
+# screen for most valid signals
+list_1985 = signallist0 %>% arrange(-nstock_1985) %>% filter(row_number() <= 100) %>% 
+  select(signalname) %>% mutate(best100_1985 = 1) 
+
+list_full = signallist0 %>% arrange(-nstock_1985_2020) %>% filter(row_number() <= 100) %>% 
+  select(signalname) %>% mutate(best100_full = 1) 
+
+# merge to documentation for checking and tables
+doc3 = doc2 %>% 
+  left_join(list_1985) %>% 
+  left_join(list_full) %>% 
+  mutate_at(vars(starts_with('best')), ~replace_na(.,0))
+
+
+
+
 
 #==============================================================================#
-# Ensure we have all good variables ----
+# Output ----
 #==============================================================================#
 
-signals <- merge(signals, crsp_data[, !c("yyyymm")], by = c("permno", "yrmon"))
 
-# Only want to use variables that we can work with in each month
-# (remove binary signals in an overly-general way)
-bad_cols <- as.character(melt(signals[ # Counts for each month
-        opt$sample_start_year <= yr & yr <= opt$sample_end_year,
-        lapply(.SD, function(x) length(unique(x[!is.na(x)]))),
-        .SDcols = !c("permno", "yyyymm", "yrmon", "yr", "mon"),
-        by = yyyymm
-    ][, # Count number of months with leq two unique observations 
-        lapply(.SD, function(x) sum(x <= 2))
-    ])[
-        value >= 1,
-        variable
-    ])
+writeLines(list_1985$signalname, '../data/signals_best100_1985.txt')
 
-# Filter to month specified
-# We do this AFTER making sure there are no bad months or it'll cause problems later on
-signals_selection <- signals[
-    opt$sample_start_year <= yr & yr <= opt$sample_end_year
-]
+writeLines(list_1985$signalname, '../data/signals_best100_full.txt')
 
-# Matrix of counts of observations, selection month
-counts <- t(signals_selection[, lapply(.SD, function(x) sum(!is.na(x))),
-    .SDcols = !c("permno", "yyyymm", "yrmon", "yr", "mon", bad_cols)])
-
-# Get first N in descending order of counts
-signal_names <- rownames(counts)[order(-counts)][1:opt$n_signals]
-
-# Output
-writeLines(signal_names, opt$signals_file)
+write.csv(doc3, '../data/signals_best_doc.csv', row.names = F)
 
 
+#==============================================================================#
+# Check (to console, for now) ----
+#==============================================================================#
+
+doc3 = fread('../data/signals_best_doc.csv')
+
+
+datasum = doc3 %>% filter(best100_1985 == 1) %>%group_by(Cat.Data) %>% summarize(nsignal_1985 = n()) %>% 
+  left_join(
+    doc3 %>% filter(best100_full == 1) %>%group_by(Cat.Data) %>% summarize(nsignal_full = n()) 
+  )   %>% 
+  left_join(
+    doc3  %>% group_by(Cat.Data) %>% summarize(nsignal_all = n()) 
+  ) %>% 
+  print(n=Inf)
+
+econsum = doc3 %>% filter(best100_1985 == 1) %>%group_by(Cat.Economic) %>% summarize(nsignal_1985 = n()) %>% 
+  left_join(
+    doc3 %>% filter(best100_full == 1) %>%group_by(Cat.Economic) %>% summarize(nsignal_full = n()) 
+  )   %>% 
+  left_join(
+    doc3  %>% group_by(Cat.Economic) %>% summarize(nsignal_all = n()) 
+  ) %>% 
+  print(n=100)
+
+
+keysignals = c('accruals','bmdec','mom12m','assetgrowth','earningssurprise', 'analystrevision', 'feps', 'gp','roaq')
+
+keysum = doc3 %>% filter(signalname %in% keysignals) %>% 
+  select(signalname, starts_with('best')) %>% 
+  print(n=100)
