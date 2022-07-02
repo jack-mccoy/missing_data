@@ -20,11 +20,11 @@ wrds_user <- getPass::getPass("WRDS username: ")
 wrds_pass <- getPass::getPass("WRDS pass: ")
 
 wrds <- DBI::dbConnect(RPostgres::Postgres(),
-                       host = "wrds-pgdata.wharton.upenn.edu",
-                       db = "wrds",
-                       port = 9737,
-                       user = wrds_user, 
-                       pass = wrds_pass)
+    host = "wrds-pgdata.wharton.upenn.edu",
+    db = "wrds",
+    port = 9737,
+    user = wrds_user, 
+    pass = wrds_pass)
 
 crspm <- as.data.table(DBI::dbGetQuery(wrds, "
     SELECT a.permno, a.date, a.ret, a.shrout, a.prc, 

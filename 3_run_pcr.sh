@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # Parameters to control the jobs
-start_yr=1990
+start_yr=1995
 end_yr=2020
 tmp_file_imp="../data/imp_tmp.csv"
 tmp_file_bc="../data/bc_tmp.csv"
 
 # Parameters for principal component regressions
-signals_file="signals.txt" # file with list of signals to use
+signals_file="../data/signals_best100_1985.txt" # file with list of signals to use
 n_pcs=100 # number of PCs in maximal regression
 n_years=10 # number of years for principal components/predictive regs
 quantile_prob=0.1 # quantile to form long/short portfolios (0.1 means deciles)
@@ -25,6 +25,9 @@ out=$(Rscript --grid_submit=batch \
     --grid_mem=200G \
     --grid_email="jmccoy26@gsb.columbia.edu" \
     3a_prep_data_em.R \
+        --impute_vec=$signals_file \
+        --sample_start_year=$start_yr \
+        --sample_end_year=$end_yr \
         --params_path=$params_path \
         --tmp_file_bc=$tmp_file_bc \
         --tmp_file_imp=$tmp_file_imp)

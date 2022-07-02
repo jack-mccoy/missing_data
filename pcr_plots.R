@@ -16,7 +16,7 @@ data_dir <- "../output/pcr_returns/"
 
 yrmons <- gsub(
   "[[:space:]]", "",
-  as.character(seq(as.yearmon("Jan 1990"), as.yearmon("Dec 2020"), by = 1/12))
+  as.character(seq(as.yearmon("Jan 1995"), as.yearmon("Dec 2020"), by = 1/12))
 )
 
 #===============================================================================

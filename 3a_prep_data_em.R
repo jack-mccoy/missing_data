@@ -14,21 +14,27 @@ library(zoo)
 #==============================================================================#
 
 option_list <- list(
-  optparse::make_option(c("--impute_vec"),
-    type = "character", default = "signals.txt",
-    help = "a comma-separated list of values or .txt file to scan"),
-  optparse::make_option(c("--tmp_file_imp"),
-    type = "character", 
-    default = "imputed_tmp.csv",
-    help = "name of temporary output file for imputed dataset"),
-  optparse::make_option(c("--tmp_file_bc"),
-    type = "character", 
-    default = "bc_tmp.csv",
-    help = "name of temporary output file for imputed dataset"),
-  optparse::make_option(c("--params_path"),
-    type = "character", 
-    default = "./",
-    help = "directory holding parameter estimates")
+    optparse::make_option(c("--impute_vec"),
+        type = "character", default = "signals.txt",
+        help = "a comma-separated list of values or .txt file to scan"),
+    optparse::make_option(c("--sample_start_year"),
+        type = "numeric", default = 1985,
+        help = "year that sample starts"),
+    optparse::make_option(c("--sample_end_year"),
+        type = "numeric", default = 2020,
+        help = "year that sample ends"),
+    optparse::make_option(c("--tmp_file_imp"),
+        type = "character", 
+        default = "imputed_tmp.csv",
+        help = "name of temporary output file for imputed dataset"),
+    optparse::make_option(c("--tmp_file_bc"),
+        type = "character", 
+        default = "bc_tmp.csv",
+        help = "name of temporary output file for imputed dataset"),
+    optparse::make_option(c("--params_path"),
+        type = "character", 
+        default = "./",
+        help = "directory holding parameter estimates")
 )
 
 opt_parser <- optparse::OptionParser(option_list = option_list)
@@ -80,7 +86,11 @@ signals <- merge(signals, crsp_data, by = c("permno", "yyyymm"))[,
 #==============================================================================#
 
 # Sequence of yearmons to impute
-yrmons <- seq(as.yearmon("Jan 1980"), as.yearmon("Dec 2020"), by = 1/12)
+yrmons <- seq(
+    as.yearmon(paste0("Jan ", opt$sample_start_year)),
+    as.yearmon(paste0("Dec ", opt$sample_end_year)),
+    by = 1/12
+)
 
 doParallel::registerDoParallel(cores = parallel::detectCores())
 imputed <- foreach::"%dopar%"(foreach::foreach(i = yrmons), {
