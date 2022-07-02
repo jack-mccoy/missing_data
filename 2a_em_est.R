@@ -87,9 +87,17 @@ crsp_data[, yyyymm := as.yearmon(yyyymm)]
 
 signals <- merge(signals, crsp_data, by = c("permno", "yyyymm"))
 
-# Find vars even worth using (at least 2 different obs for variance) 
-signals_good <- names(which(sapply(signals[, .SD, .SDcols = opt$impute_vec],
-  function(x) sum(!is.na(x), na.rm = T) >= 2 & length(unique(x[!is.na(x)])) > 2)))
+# A safety check to make sure we don't have any signals with a month of <2 obs
+signals_good <- names(which(sapply( # `which` filters out the `FALSE` results
+    signals[,
+        lapply(.SD, function(x) { # has at least two unique observations
+            sum(!is.na(x), na.rm = T) >= 2 & length(unique(x[!is.na(x)])) > 2
+        }),
+        .SDcols = opt$impute_vec, # the candidate list we passed in
+        by = yyyymm # for each year-month
+    ], 
+    all # and then check that it holds for all months
+)))
 
 # select to those variables
 signals <- signals[, .SD, .SDcols = c("permno", "yyyymm", signals_good)]
