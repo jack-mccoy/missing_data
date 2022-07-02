@@ -18,7 +18,7 @@ source("functions.R")
 
 
 #==============================================================================#
-# Read in data ----
+# Read in data (cts only) ----
 #==============================================================================#
 
 # Read in the downloadable signals 
@@ -42,83 +42,33 @@ signaldoc = fread('../data/SignalDoc.csv')  %>%
   mutate(signalname = tolower(signalname)) %>% 
   filter(
     Cat.Signal == 'Predictor'
+  ) %>% 
+  # fix typo for earningssurprise
+  mutate(
+    Cat.Data = if_else(signalname == 'earningssurprise', 'Accounting', Cat.Data)
   )
 
 # make indicator matrix of observations (this is all we need here)
-obs = signals %>% mutate_at(vars(-c('yyyymm','permno')), function (x) as.numeric(!is.na(x)) )
+obs = signals %>% 
+  mutate_at(vars(-c('yyyymm')), function (x) as.numeric(!is.na(x)) ) %>% 
+  # keep only if streversal is observed
+  filter(streversal == 1)
+
+# drop discrete
+list_cts = signaldoc[Cat.Form == 'continuous'] %>% pull(signalname)
+obs = obs %>% select(yyyymm,permno,all_of(list_cts))
 
 gc()
 
 #==============================================================================#
-# Drop bad signals ----
-#==============================================================================#
-# Drop discrete and signals w/ gaps
-# and here drop anything else we want to in the future
-
-# user
-min_obs_ok = 100
-date_start = 1985
-date_end = 2020
-
-# find continuous
-list_cts = signaldoc[Cat.Form == 'continuous'] %>% pull(signalname)
-
-# find totally-missing-months
-obs_by_date = obs[
-  , by = yyyymm
-  , lapply(.SD, sum)
-  , .SDcols = !c('permno','yyyymm')
-] %>% 
-  pivot_longer(cols = -c('yyyymm'), names_to = 'signalname', values_to = 'obs') %>% 
-  group_by(signalname)
-
-# find start / end dates by signal (not used right now)
-date_start_end = left_join(
-  obs_by_date %>% 
-    filter(obs > min_obs_ok) %>% 
-    arrange(signalname,yyyymm) %>% 
-    filter(row_number() == 1) %>% 
-    transmute(signalname, date_first_obs = yyyymm)
-  , obs_by_date %>% 
-    filter(obs > min_obs_ok) %>% 
-    arrange(signalname,-yyyymm) %>% 
-    filter(row_number() == 1) %>% 
-    transmute(signalname, date_last_obs = yyyymm)
-)
-
-
-# find gaps
-gaps_all = obs_by_date %>% 
-  left_join(
-    date_start_end, by = 'signalname'
-  )  %>% 
-  filter(
-    yyyymm >= date_start, yyyymm <= date_end, obs < 2
-  ) %>% 
-  arrange(signalname, yyyymm) %>% 
-  print(n=100)
-
-list_gap = gaps_all %>% distinct(signalname, .keep_all = T) %>% pull(signalname)
-
-# out to console
-list_cts
-intersect(list_cts,list_gap)
-
-# remove bad guys
-obs2 = obs %>% select(permno,yyyymm,all_of(list_cts)) %>% select(-intersect(list_cts,list_gap))
-
-length(names(obs2)) - 2
-
-
-#==============================================================================#
-# Find Stats ----
+# Tables: sum stats ----
 #==============================================================================#
 
 ## Make small dataset ----
 
 # keep only representative years
 datelist = as.yearmon(c(
-  'Jun 1970'
+  'Jun 1970', 'Jun 1975'
   , 'Jun 1980', 'Jun 1985'
   , 'Jun 1990', 'Jun 1995'
   , 'Jun 2000', 'Jun 2005'
@@ -126,34 +76,33 @@ datelist = as.yearmon(c(
 ))
 
 # make small dataset for sum stats
-small = obs2 %>% filter(yyyymm %in% datelist) %>% 
-  select(-permno) %>% filter(streversal == 1)
+small = obs %>% filter(yyyymm %in% datelist) 
 
 
 ## One signal summaries ----
-
-# pctiles
-ptile = c(5, 10, 25, 50, 75, 90, 95)
-
+# dateselect = as.yearmon(c('Jun 1970','Jun 1980','Jun 1990','Jun 2000','Jun 2010'))
+# dateselect = as.yearmon(c('Jun 1975','Jun 1985','Jun 1995','Jun 2005','Jun 2015'))
+dateselect = as.yearmon(c('Jun 1970','Jun 1975','Jun 1980','Jun 1985','Jun 1990', 'Jun 2000'))
+ptile = c(5, 25, 50, 75, 95)
 
 # one-signal sum
 nobs_by_signal = small %>% 
   group_by(yyyymm) %>% 
   summarize_all(sum) %>% 
   pivot_longer(
-    cols = -c(yyyymm,streversal), names_to = 'signalname', values_to = 'nobs'
+    cols = -c(yyyymm,permno), names_to = 'signalname', values_to = 'nobs'
   ) %>% 
   mutate(
-    pct_obs = nobs/streversal*100
+    pct_obs = nobs/permno*100
   )
 
-# table for output
 pct_obs_one_signal_ptile = nobs_by_signal %>% 
+  filter(yyyymm %in% dateselect) %>% 
   group_by(yyyymm) %>% 
   summarize(
     ptile = ptile
     , pct_obs = quantile(pct_obs, ptile/100)
-  ) %>% 
+  ) %>%
   pivot_wider(
     names_from = ptile, values_from = pct_obs
   ) %>% t()
@@ -163,11 +112,9 @@ pct_obs_one_signal_ptile
 write.csv(pct_obs_one_signal_ptile, '../output/pct_obs_one_signal_ptile.csv')
 
 
-
-
 ## Many signal summaries ----
-datelist2 = as.yearmon(c('Jun 1990', 'Jun 2000', 'Jun 2010'))
-
+dateselect = c(1975, 1985, 1995)
+Jselect = seq(25,150,25)
 
 # focus on sets of predictors determined by obs in 1985
 nobs_by_signal_overall = small %>% 
@@ -175,10 +122,10 @@ nobs_by_signal_overall = small %>%
   select(-yyyymm) %>% 
   summarize_all(sum) %>% 
   pivot_longer(
-    cols = -c(streversal), names_to = 'signalname', values_to = 'nobs'
+    cols = -c(permno), names_to = 'signalname', values_to = 'nobs'
   ) %>% 
   mutate(
-    pct_obs = nobs/streversal*100
+    pct_obs = nobs/permno*100
   ) %>% 
   arrange(
     -pct_obs
@@ -219,13 +166,14 @@ for (datecurr in datelist){
 
 
 # reshape for output
-dat_long = dat %>% 
+nobs_by_J_signals = dat %>% 
   pivot_longer(
     cols = starts_with('pct'), names_to = 'type', values_to = 'pct', names_prefix = 'pct_'
   )
 
 
-pct_obs_by_nsignal = dat_long %>% 
+pct_obs_by_nsignal = nobs_by_J_signals %>% 
+  filter(floor(datecurr) %in% dateselect, J %in% Jselect) %>% 
   mutate(
     datecurr = paste0('y', floor(datecurr))
   ) %>% 
@@ -243,12 +191,38 @@ write.csv(pct_obs_by_nsignal, '../output/pct_obs_by_nsignal.csv')
 pct_obs_by_nsignal
 
 #==============================================================================#
-# Output final lists of signals ----
+# Final lists of signals ----
 #==============================================================================#
+
+## flag bad signals ----
+
+# user
+date_start = 1985
+date_end = 2020
+
+# find totally-missing-months
+obs_by_date = obs[
+  , by = yyyymm
+  , lapply(.SD, sum)
+  , .SDcols = !c('permno','yyyymm')
+] %>% 
+  pivot_longer(cols = -c('yyyymm'), names_to = 'signalname', values_to = 'obs') %>% 
+  group_by(signalname)
+
+# find gaps
+gaps_all = obs_by_date %>% 
+  filter(
+    yyyymm >= date_start, yyyymm <= date_end, obs < 2
+  ) %>% 
+  arrange(signalname, yyyymm) 
+
+list_gap = gaps_all %>% distinct(signalname, .keep_all = T) %>% pull(signalname)
+
 
 ## find lists ----
 list_1985 = nobs_by_signal %>% 
   filter(year(yyyymm) == 1985) %>% 
+  filter(!signalname %in% list_gap) %>%   
   group_by(signalname) %>% 
   summarize(
     mean_pct_obs = mean(pct_obs)
@@ -258,10 +232,12 @@ list_1985 = nobs_by_signal %>%
     rank = row_number()
     , best100 = if_else(row_number() <= 100, 1, 0)
   ) %>% 
-  select(signalname, mean_pct_obs, rank, best100) 
+  select(signalname, mean_pct_obs, rank, best100)  %>% 
+  print(n=2000)
 
 list_full = nobs_by_signal %>% 
   filter(yyyymm >= date_start, yyyymm <= date_end) %>% 
+  filter(!signalname %in% list_gap) %>%     
   group_by(signalname) %>% 
   summarize(
     mean_pct_obs = mean(pct_obs)
@@ -271,68 +247,39 @@ list_full = nobs_by_signal %>%
     rank = row_number()
     , best100 = if_else(row_number() <= 100, 1, 0)
   ) %>% 
-  select(signalname, mean_pct_obs, rank, best100) 
+  select(signalname, mean_pct_obs, rank, best100) %>% 
+  print(n=2000)
 
 
 # merge to documentation for checking and tables (add more info later)
 signaldoc2 = signaldoc %>% 
-  left_join(list_1985 %>% transmute(signalname, rank1985 = rank) ) %>% 
-  left_join(list_full %>% transmute(signalname, rankfull = rank) )
+  left_join(list_1985 %>% transmute(signalname, pct_obs_1985 = mean_pct_obs, rank1985 = rank) ) %>% 
+  left_join(list_full %>% transmute(signalname, pct_obs_full = mean_pct_obs, rankfull = rank) )
   
 
 ## output ----
-writeLines(list_1985$signalname, '../data/signals_best100_1985.txt')
-
-writeLines(list_full$signalname, '../data/signals_best100_full.txt')
-
-write.csv(signaldoc2, '../data/signals_best_doc.csv', row.names = F)
-
-
-
-
-#==============================================================================#
-# Check (to console, for now) ----
-#==============================================================================#
-
-doc3 = fread('../data/signals_best_doc.csv')
-
-signaldoc %>% filter(Cat.Data == 'Analyst') %>% 
-  left_join(
-    list_1985
-  ) %>% 
-  select(signalname, mean_pct_obs, rank, best100)
-
-
-
-datasum = doc3 %>% filter(best100_1985 == 1) %>%group_by(Cat.Data) %>% summarize(nsignal_1985 = n()) %>% 
-  left_join(
-    doc3 %>% filter(best100_full == 1) %>%group_by(Cat.Data) %>% summarize(nsignal_full = n()) 
-  )   %>% 
-  left_join(
-    doc3  %>% group_by(Cat.Data) %>% summarize(nsignal_all = n()) 
-  ) %>% 
-  print(n=Inf)
-
-econsum = doc3 %>% filter(best100_1985 == 1) %>%group_by(Cat.Economic) %>% summarize(nsignal_1985 = n()) %>% 
-  left_join(
-    doc3 %>% filter(best100_full == 1) %>%group_by(Cat.Economic) %>% summarize(nsignal_full = n()) 
-  )   %>% 
-  left_join(
-    doc3  %>% group_by(Cat.Economic) %>% summarize(nsignal_all = n()) 
-  ) %>% 
-  print(n=100)
-
-
-keysignals = c(
-  'accruals','bmdec','mom12m','assetgrowth'
-  ,'earningssurprise', 'analystrevision', 'feps'
-  , 'gp','roaq'
-  , 'smileslope', 'skew1'
+writeLines(
+  signaldoc2 %>% filter(rank1985 <= 100) %>% pull(signalname)
+  , '../data/signals_best100_1985.txt'
 )
 
-keysum = doc3 %>% filter(signalname %in% keysignals) %>% 
-  select(signalname, starts_with('best')) %>% 
-  print(n=100)
+writeLines(
+  signaldoc2 %>% filter(rank1985 <= 125) %>% pull(signalname)
+  , '../data/signals_best125_1985.txt'
+)
+
+writeLines(
+  signaldoc2 %>% filter(rank1985 <= 150) %>% pull(signalname)
+  , '../data/signals_best150_1985.txt'
+)
+
+writeLines(
+  signaldoc2 %>% filter(rankfull <= 100) %>% pull(signalname)
+  , '../data/signals_best100_full.txt'
+)
+
+
+write.csv(signaldoc2, '../data/signals_best_doc.csv', row.names = F)
 
 
 #==============================================================================#
@@ -340,9 +287,22 @@ keysum = doc3 %>% filter(signalname %in% keysignals) %>%
 #==============================================================================#
 
 
+
+
+## final list (baseline) ----
+final_list = signaldoc2 %>% 
+  mutate(
+    AuthorYear = paste0(Authors, ' ', Year)
+  ) %>% 
+  select(
+    signalname, AuthorYear, pct_obs_1985, rank1985
+  ) %>% 
+  arrange(rank1985) %>% 
+  filter(rank1985 <= 100)
+
+
 # Create Latex output table 1: Clear Predictors
-outputtable1 <- xtable(final_list %>%
-                         filter(rank <= 75) )
+outputtable1 <- xtable(final_list )
 
 
 print(outputtable1,
@@ -352,7 +312,14 @@ print(outputtable1,
       only.contents = TRUE,
       file = '../output/final_list.tex')
 
-# Check on stuff manually ----
+
+
+
+
+#==============================================================================#
+# Check (to console, for now) ----
+#==============================================================================#
+
 
 ## list signal names for examples  ----
 nobs_by_signal %>% 
@@ -368,24 +335,57 @@ nobs_by_signal %>%
   filter(yyyymm == 'Jun 2000') %>% 
   filter(pct_obs <= 65, pct_obs >= 60)
 
-## list all in the June 1980 reference month ----
+## list all in the June 1985 reference month ----
 final_list %>% as.data.frame()
 
-## find when particular predictors appear in the data ----
 
-signals %>% 
-  select(permno,yyyymm,earningsstreak,sfe,forecastdispersion,feps) %>% 
-  mutate(
-    yyyymm = as.numeric(yyyymm)
+
+
+## data coverage ----
+datasum = signaldoc2  %>% group_by(Cat.Data) %>% summarize(nsignal_all = n())  %>% 
+  left_join(
+    signaldoc2 %>% filter(rank1985 <= 100) %>% group_by(Cat.Data) %>% summarize(nsignal_1985 = n()) 
   ) %>% 
-  filter(
-    yyyymm >= 1970, yyyymm%%1 == 0
+  left_join(
+    signaldoc2 %>% filter(rankfull <= 100) %>% group_by(Cat.Data) %>% summarize(nsignal_full = n()) 
+  )   %>% 
+  mutate_all(~replace_na(.,0)) %>% 
+  print(n=300)
+
+## economic coverage ----
+
+econsum = signaldoc2  %>% group_by(Cat.Economic) %>% summarize(nsignal_all = n())  %>% 
+  left_join(
+    signaldoc2 %>% filter(rank1985 <= 100) %>% group_by(Cat.Economic) %>% summarize(nsignal_1985 = n()) 
   ) %>% 
-  group_by(yyyymm) %>% 
-  summarize_all(
-    function (x) sum(!is.na(x))
+  left_join(
+    signaldoc2 %>% filter(rankfull <= 100) %>% group_by(Cat.Economic) %>% summarize(nsignal_full = n()) 
+  )   %>% 
+  mutate_all(~replace_na(.,0)) %>% 
+  print(n=300)
+
+## select coverage ----
+
+selectsignals = c(
+  'accruals','bmdec','mom12m','assetgrowth'
+  ,'earningssurprise', 'analystrevision', 'feps'
+  , 'gp','roaq'
+  , 'smileslope', 'skew1'
+)
+
+keysum = signaldoc2 %>% filter(signalname %in% selectsignals) %>% 
+  select(signalname, starts_with('pct'), starts_with('rank')) %>% 
+  arrange(rank1985) %>% 
+  print(n=100) 
+
+
+
+## analyst signals ----
+
+signaldoc %>% filter(Cat.Data == 'Analyst') %>% 
+  left_join(
+    list_1985
   ) %>% 
-  mutate_at(
-    vars(-c('yyyymm','permno')), funs(./permno*100)
-  ) %>% 
-  print(n=50)
+  select(signalname, mean_pct_obs, rank, best100) %>% 
+  filter(!is.na(rank)) %>% 
+  arrange(rank)
