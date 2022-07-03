@@ -95,6 +95,8 @@ signals_good <- names(which(sapply( # `which` filters out the `FALSE` results
         }),
         .SDcols = opt$impute_vec, # the candidate list we passed in
         by = yyyymm # for each year-month
+    ][, 
+        !c("yyyymm") # don't want to check this column
     ], 
     all # and then check that it holds for all months
 )))
@@ -104,6 +106,10 @@ signals <- signals[, .SD, .SDcols = c("permno", "yyyymm", signals_good)]
 
 # Memory
 rm(crsp_data)
+
+# For checking in log
+cat("There are a total of", length(signals_good), "signals with enough data.\n")
+print(signals_good)
 
 #==============================================================================#
 # Box-Cox transformations and scaling
