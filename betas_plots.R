@@ -14,9 +14,9 @@ source("functions.R")
 #==============================================================================#
 
 # where we're pulling data and storing plots 
-data_path <- "../data/"
-ests_path <- "../output/impute_ests/"
-plot_path <- "../output/plots/"
+data_path <- "../output_best100_1985/"
+ests_path <- "../output_best100_1985/impute_ests/"
+plot_path <- "../output_best100_1985/plots/"
 
 # input files
 data_file <- paste0(data_path, "bc_tmp.csv")

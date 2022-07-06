@@ -14,7 +14,7 @@ source("functions.R")
 # Hardcodes
 #===============================================================================
 
-plot_path <- "../output/plots/"
+plot_path <- "../output_best100_1985/plots/"
 
 dates <- as.yearmon(c("Jun 1990", "Jun 2000", "Jun 2010"))
 
@@ -22,13 +22,13 @@ dates <- as.yearmon(c("Jun 1990", "Jun 2000", "Jun 2010"))
 # Signals
 #===============================================================================
 
-signals_keep <- scan("signals.txt", character()) 
+signals_keep <- scan("../data/signals_best100_1985.txt", character()) 
 
 #===============================================================================
 # Read in the data
 #===============================================================================
 
-dat <- fread("../data/bc_tmp.csv", select = c("permno", "yyyymm", signals_keep))[
+dat <- fread("../output_best100_1985/bc_tmp.csv", select = c("permno", "yyyymm", signals_keep))[
     as.yearmon(yyyymm) %in% dates # Keep only the months we need
 ]
 
