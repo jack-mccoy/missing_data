@@ -1,16 +1,16 @@
 
-#===============================================================================
-# Packages
-#===============================================================================
+#===============================================================================#
+# Packages ----
+#===============================================================================#
 
 library(data.table)
 library(ggplot2)
 library(gridExtra)
 library(zoo)
 
-#===============================================================================
-# Hardcodes
-#===============================================================================
+#===============================================================================#
+# Hardcodes ----
+#===============================================================================#
 
 data_dir <- "../output_best100_1985/pcr_returns/"
 
@@ -19,9 +19,9 @@ yrmons <- gsub(
   as.character(seq(as.yearmon("Jan 1995"), as.yearmon("Dec 2020"), by = 1/12))
 )
 
-#===============================================================================
-# Pull in and format data
-#===============================================================================
+#===============================================================================#
+# Pull in and format data ----
+#===============================================================================#
 
 # Each CSV is stored separately for a given month from different run of 2b_pcr.R
 pcr_em <- list()
@@ -70,39 +70,68 @@ agg_data <- pcr_all[
   ls_sharpe = ls_mn / ls_sd
 )][,
   weighting := dplyr::case_when(
-    weighting == "vw_ls" ~ "Value weighted",
-    weighting == "ew_ls" ~ "Equal weighted"
+    weighting == "vw_ls" ~ "Value",
+    weighting == "ew_ls" ~ "Equal"
   )
 ]
 
-#===============================================================================
-# Plots
-#===============================================================================
+#===============================================================================#
+# Plots ----
+#===============================================================================#
 
-# Aggregate plots ----
+## Aggregate plots ----
+scale_gg = 0.55
 
 # All the line plots will have same basic look
 plot_base <- ggplot(agg_data, aes(x = pc, colour = weighting, linetype = type)) + 
   theme_bw() + 
   theme(
-    #legend.position = c(0.8, 0.6),
+    legend.position = c(23,85)/100,
     legend.background = element_blank(),
-    legend.key = element_blank()
+    legend.key = element_blank(),
+    legend.spacing.y = unit(0.01, 'cm'),
+    legend.spacing.x = unit(0.2, 'cm'),
+    legend.box = 'horizontal',
+    legend.key.size = unit(0.4, 'cm'),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 9)
   ) + 
   labs(
-    colour = "Weighting",
-    linetype = "Imputation Type",
+    colour = "Stock Weights",
+    linetype = "Imputation",
     x = "Number of PCs"
+  ) +
+  guides(
+    colour = guide_legend(order = 1), linetype = guide_legend(order = 2)
   )
 
 mn <- plot_base + geom_line(aes(y = ls_mn)) + 
-  ylab("Annualized mean return")
+  ylab("Annualized Mean Return (%)")
 sd <- plot_base + geom_line(aes(y = ls_sd)) +
-  ylab("Annualized std. dev.")
+  ylab("Annualized Std. Dev. (%)") 
 sharpe <- plot_base + geom_line(aes(y = ls_sharpe)) + 
-  ylab("Annualized Sharpe ratio")
+  ylab("Annualized Sharpe Ratio") +
+  coord_cartesian(ylim = c(0,2.1))
 
-# Cumulative returns over time ----
+out_grid <- marrangeGrob(
+  grobs = list(mn, sd, sharpe),
+  ncol = 1, nrow = 3,
+  top = "LS returns (using deciles) from principal component regressions",
+  vp = grid::viewport(width = unit(5.5, "in"), height = unit(10, "in"))
+)
+
+
+ggsave(plot = mn, 
+       filename = "../output_best100_1985/plots/pcr_expected_rets.pdf",
+       width = 8, height = 5, unit = "in", scale = scale_gg)
+
+ggsave(plot = sharpe, 
+       filename = "../output_best100_1985/plots/pcr_sharpes.pdf",
+       width = 8, height = 5, unit = "in", scale = scale_gg)
+
+
+
+## Cumulative returns over time ----
 
 cumret_plot <- ggplot(
     pcr_all[pc %in% c(2, 10, 25, 37)],
@@ -123,22 +152,6 @@ cumret_plot <- ggplot(
     legend.key = element_blank()
   )
 
-#===============================================================================
-# Save
-#===============================================================================
 
-out_grid <- marrangeGrob(
-  grobs = list(mn, sd, sharpe),
-  ncol = 1, nrow = 3,
-  top = "LS returns (using deciles) from principal component regressions",
-  vp = grid::viewport(width = unit(5.5, "in"), height = unit(10, "in"))
-)
 
-ggsave(plot = mn, 
-  filename = "../output_best100_1985/plots/pcr_expected_rets.pdf",
-  width = 8, height = 6, unit = "in")
-
-ggsave(plot = sharpe, 
-  filename = "../output_best100_1985/plots/pcr_sharpes.pdf",
-  width = 8, height = 6, unit = "in")
 
