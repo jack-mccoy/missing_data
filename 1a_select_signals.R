@@ -274,6 +274,11 @@ writeLines(
 )
 
 writeLines(
+  signaldoc2 %>% filter(!is.na(rank1985)) %>% pull(signalname)
+  , '../data/signals_best157.txt'
+)
+
+writeLines(
   signaldoc2 %>% filter(rankfull <= 100) %>% pull(signalname)
   , '../data/signals_best100_full.txt'
 )
