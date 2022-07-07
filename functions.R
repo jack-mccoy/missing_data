@@ -658,7 +658,7 @@ missPlot <- function(data, rhs_vars, xlab = "Stock i.d.", ylab = "Anomaly i.d.",
   col_miss <- colSums(nas)
   col_ind <- order(-col_miss) 
   nas <- nas[, ..col_ind]
-  signal_id <- data.table(variable = colnames(nas), id = 1:ncol(nas)) 
+  signal_id <- data.table(variable = colnames(nas), id = 1:ncol(nas))
   nas[, firm_id := 1:nrow(nas)]
 
   ratio <- nrow(nas)*1/(ncol(nas) - 1)
