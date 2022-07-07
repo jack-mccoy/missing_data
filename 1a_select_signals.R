@@ -347,26 +347,28 @@ final_list %>% as.data.frame()
 
 
 ## data coverage ----
+nsignalselect = 125
+
 datasum = signaldoc2  %>% group_by(Cat.Data) %>% summarize(nsignal_all = n())  %>% 
   left_join(
-    signaldoc2 %>% filter(rank1985 <= 100) %>% group_by(Cat.Data) %>% summarize(nsignal_1985 = n()) 
+    signaldoc2 %>% filter(rank1985 <= nsignalselect) %>% group_by(Cat.Data) %>% summarize(nsignal_1985 = n()) 
   ) %>% 
   left_join(
-    signaldoc2 %>% filter(rankfull <= 100) %>% group_by(Cat.Data) %>% summarize(nsignal_full = n()) 
+    signaldoc2 %>% filter(rankfull <= nsignalselect) %>% group_by(Cat.Data) %>% summarize(nsignal_full = n()) 
   )   %>% 
-  mutate_all(~replace_na(.,0)) %>% 
+  mutate_at(vars(-c('Cat.Data')), ~replace_na(.,0)) %>% 
   print(n=300)
 
 ## economic coverage ----
 
 econsum = signaldoc2  %>% group_by(Cat.Economic) %>% summarize(nsignal_all = n())  %>% 
   left_join(
-    signaldoc2 %>% filter(rank1985 <= 100) %>% group_by(Cat.Economic) %>% summarize(nsignal_1985 = n()) 
+    signaldoc2 %>% filter(rank1985 <= nsignalselect) %>% group_by(Cat.Economic) %>% summarize(nsignal_1985 = n()) 
   ) %>% 
   left_join(
-    signaldoc2 %>% filter(rankfull <= 100) %>% group_by(Cat.Economic) %>% summarize(nsignal_full = n()) 
+    signaldoc2 %>% filter(rankfull <= nsignalselect) %>% group_by(Cat.Economic) %>% summarize(nsignal_full = n()) 
   )   %>% 
-  mutate_all(~replace_na(.,0)) %>% 
+  mutate_at(vars(-c('Cat.Economic')), ~replace_na(.,0)) %>% 
   print(n=300)
 
 ## select coverage ----
@@ -381,7 +383,7 @@ selectsignals = c(
 keysum = signaldoc2 %>% filter(signalname %in% selectsignals) %>% 
   select(signalname, starts_with('pct'), starts_with('rank')) %>% 
   arrange(rank1985) %>% 
-  print(n=100) 
+  print(n=nsignalselect) 
 
 
 
