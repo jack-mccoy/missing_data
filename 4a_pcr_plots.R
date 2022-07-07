@@ -12,12 +12,14 @@ library(zoo)
 # Hardcodes ----
 #===============================================================================#
 
-data_dir <- "../output_best100_1985/pcr_returns/"
+data_dir <- "../output/pcr_returns/"
 
 yrmons <- gsub(
   "[[:space:]]", "",
   as.character(seq(as.yearmon("Jan 1995"), as.yearmon("Dec 2020"), by = 1/12))
 )
+
+unique(fread('../output/impute_ests/bcn_scale_Apr2000.csv')$variable)
 
 #===============================================================================#
 # Pull in and format data ----
@@ -58,9 +60,18 @@ pcr_all[
   by = .(type, weighting, pc)
 ]
 
+
+#===============================================================================#
+# Plots ----
+#===============================================================================#
+
+## Aggregate plots ----
+scale_gg = 0.55
+Npc_max = 80 
+
 # Combine all the data to get average returns and Sharpe ratio over time
 agg_data <- pcr_all[
-  pc <= 50, # Only show up to 50 PCs
+  pc <= Npc_max,
   .( # Get as annualized mean return and std. dev.
     ls_mn = mean(ls_ret, na.rm = T) * 12,
     ls_sd = sd(ls_ret, na.rm = T) * sqrt(12)
@@ -69,18 +80,12 @@ agg_data <- pcr_all[
 ][, ":="( # Sharpe ratios
   ls_sharpe = ls_mn / ls_sd
 )][,
-  weighting := dplyr::case_when(
-    weighting == "vw_ls" ~ "Value",
-    weighting == "ew_ls" ~ "Equal"
-  )
+   weighting := dplyr::case_when(
+     weighting == "vw_ls" ~ "Value",
+     weighting == "ew_ls" ~ "Equal"
+   )
 ]
 
-#===============================================================================#
-# Plots ----
-#===============================================================================#
-
-## Aggregate plots ----
-scale_gg = 0.55
 
 # All the line plots will have same basic look
 plot_base <- ggplot(agg_data, aes(x = pc, colour = weighting, linetype = type)) + 
@@ -110,8 +115,7 @@ mn <- plot_base + geom_line(aes(y = ls_mn)) +
 sd <- plot_base + geom_line(aes(y = ls_sd)) +
   ylab("Annualized Std. Dev. (%)") 
 sharpe <- plot_base + geom_line(aes(y = ls_sharpe)) + 
-  ylab("Annualized Sharpe Ratio") +
-  coord_cartesian(ylim = c(0,2.1))
+  ylab("Annualized Sharpe Ratio") 
 
 out_grid <- marrangeGrob(
   grobs = list(mn, sd, sharpe),
@@ -122,11 +126,11 @@ out_grid <- marrangeGrob(
 
 
 ggsave(plot = mn, 
-       filename = "../output_best100_1985/plots/pcr_expected_rets.pdf",
+       filename = "../output/plots/pcr_expected_rets.pdf",
        width = 8, height = 5, unit = "in", scale = scale_gg)
 
 ggsave(plot = sharpe, 
-       filename = "../output_best100_1985/plots/pcr_sharpes.pdf",
+       filename = "../output/plots/pcr_sharpes.pdf",
        width = 8, height = 5, unit = "in", scale = scale_gg)
 
 
