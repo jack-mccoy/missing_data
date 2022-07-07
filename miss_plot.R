@@ -46,7 +46,7 @@ for (dd in 1:length(dates)) {
         rhs_vars = signals_keep,
         title = "")
     ggsave(plot = tmp, filename = paste0("missplot_", date_file, ".pdf"), 
-        width = 7, height = 5, unit = "in")
+        width = 10, height = 7, unit = "in")
     rm(tmp)
 }
 

@@ -644,7 +644,7 @@ imputeVec <- function(x, na.rm = T) {
 #-------------------------------------------------------------------------------
 # Missingness plot 
 #-------------------------------------------------------------------------------
-missPlot <- function(data, rhs_vars, xlab = "Stock i.d.", ylab = "Anomaly",
+missPlot <- function(data, rhs_vars, xlab = "Stock i.d.", ylab = "Anomaly i.d.",
   title = "Missingness Map"
 ) {
   data2 <- copy(as.data.table(data))
@@ -658,12 +658,13 @@ missPlot <- function(data, rhs_vars, xlab = "Stock i.d.", ylab = "Anomaly",
   col_miss <- colSums(nas)
   col_ind <- order(-col_miss) 
   nas <- nas[, ..col_ind]
+  signal_id <- data.table(variable = colnames(nas), id = 1:ncol(nas)) 
   nas[, firm_id := 1:nrow(nas)]
 
   ratio <- nrow(nas)*1/(ncol(nas) - 1)
-  nas_long <- melt(nas, id = "firm_id")
+  nas_long <- merge(melt(nas, id = "firm_id"), signal_id, by = "variable") 
 
-  miss_plot <- ggplot(data = nas_long, aes(x = firm_id, y = variable)) + 
+  miss_plot <- ggplot(data = nas_long, aes(x = firm_id, y = id)) + 
     geom_raster(aes(fill = value)) +
     labs(x = xlab, y = ylab, color = "") + 
     scale_fill_manual(
@@ -676,11 +677,11 @@ missPlot <- function(data, rhs_vars, xlab = "Stock i.d.", ylab = "Anomaly",
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
       panel.background = element_blank(),
-      axis.text.y = element_text(size = rel(0.5)),
       legend.position = "bottom",
       legend.background = element_rect(fill = "lightgrey")
     ) +
     scale_x_continuous(expand = c(0,0)) +
+    scale_y_continuous(expand = c(0,0)) +
     ggtitle(title)# + 
     #coord_fixed(ratio)
   

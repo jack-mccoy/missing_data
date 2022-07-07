@@ -6,9 +6,9 @@ Rscript --grid_submit=batch \
     --grid_ncpus=12 \
     --grid_email="jmccoy26@gsb.columbia.edu" \
     2a_em_est.R \
-        --impute_vec="../data/signals_best125_1985.txt" \
+        --impute_vec="../output_best157/signals_best157.txt" \
         --maxiter=10000 \
-        --out_path="../output_best125_1985/impute_ests/" \
+        --out_path="../output_best157/impute_ests/" \
         --tol=1e-4 \
         --boxcox \
         -f # force the convergence
