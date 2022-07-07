@@ -109,7 +109,7 @@ pct_obs_one_signal_ptile = nobs_by_signal %>%
 
 pct_obs_one_signal_ptile 
 
-write.csv(pct_obs_one_signal_ptile, '../output/pct_obs_one_signal_ptile.csv')
+write.csv(pct_obs_one_signal_ptile, '../output/plots/pct_obs_one_signal_ptile.csv')
 
 
 ## Many signal summaries ----
@@ -186,7 +186,7 @@ pct_obs_by_nsignal = nobs_by_J_signals %>%
   )
 
 
-write.csv(pct_obs_by_nsignal, '../output/pct_obs_by_nsignal.csv')
+write.csv(pct_obs_by_nsignal, '../output/plots/pct_obs_by_nsignal.csv')
 
 pct_obs_by_nsignal
 
@@ -303,11 +303,14 @@ final_list = signaldoc2 %>%
     signalname, AuthorYear, pct_obs_1985, rank1985
   ) %>% 
   arrange(rank1985) %>% 
-  filter(rank1985 <= 100)
+  filter(rank1985 <= 125) 
 
 
 # Create Latex output table 1: Clear Predictors
-outputtable1 <- xtable(final_list )
+outputtable1 <- xtable(
+  final_list 
+  , digits = c(0,0,0,1,0)
+)
 
 
 print(outputtable1,
@@ -315,7 +318,7 @@ print(outputtable1,
       include.colnames = FALSE,
       hline.after = NULL,
       only.contents = TRUE,
-      file = '../output/final_list.tex')
+      file = '../output/plots/final_list.tex')
 
 
 

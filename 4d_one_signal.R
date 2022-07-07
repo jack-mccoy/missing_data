@@ -6,8 +6,8 @@ library(data.table)
 library(tidyverse)
 library(ggplot2)
 
-datebegin = 1980
-dateend   = 2018
+datebegin = 1985
+dateend   = 2020
 
 # fix number of stocks in each leg to "control" for "signal loading" of mvn vs simple strats
 nstock_per_leg = 500 
@@ -217,6 +217,6 @@ imp_sum2 = imp_sum %>%
 
 imp_sum2
 
-write.csv(imp_sum2, file = '../output/one_signal.csv' )
+write.csv(imp_sum2, file = '../output/plots/one_signal.csv' )
 
 

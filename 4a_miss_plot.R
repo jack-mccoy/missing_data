@@ -18,19 +18,10 @@ plot_path <- "../output/plots/"
 
 dates <- as.yearmon(c("Jun 1990", "Jun 2000", "Jun 2010"))
 
-#===============================================================================
-# Signals
-#===============================================================================
-
-signals_keep <- scan("../data/signals_best100_1985.txt", character()) 
 
 #===============================================================================
 # Read in the data
 #===============================================================================
-
-# dat <- fread("../output/bc_tmp.csv", select = c("permno", "yyyymm", signals_keep))[
-#     as.yearmon(yyyymm) %in% dates # Keep only the months we need
-# ]
 
 dat <- fread("../output/bc_tmp.csv")[
   as.yearmon(yyyymm) %in% dates # Keep only the months we need

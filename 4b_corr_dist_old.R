@@ -5,11 +5,9 @@ rm(list = ls())
 library(data.table)
 library(tidyverse)
 library(ggplot2)
-library(zoo)
 
 
-dateliststr = c('Jun1990', 'Jun2000', 'Jun2010')
-datelist = as.yearmon(dateliststr)
+datelist = c(1990.5, 2000.5, 2010.5)
 
 outpath = '../output/'
 
@@ -52,63 +50,53 @@ chen_theme =   theme_minimal() +
 
 # read in data ----
 
-## read in observed ----
+## read ----
+# round yyyymm to make sure they match (needed because the write precision differs?)
 
-# observed signals (transformed)
-signals_obs = fread(paste0(outpath, 'bc_tmp.csv'))
-signals_obs = signals_obs[ , yyyymm := as.yearmon(yyyymm)][yyyymm %in% datelist]
+# signals 
+signals_mvn = fread(paste0(outpath, 'imp_tmp.csv')) %>% 
+  mutate(yyyymm = round(yyyymm, 3)) 
 
-# convert to covariance matricies
-cor_obs = data.table()
-for (datecurr in datelist){
-  
-  # select data
-  signalmat = signals_obs %>% 
-    filter(yyyymm == datecurr) %>% 
-    select(-c(permno,yyyymm)) %>% 
-    as.matrix() 
-  
-  # calc correlation
-  cmat = cor(signalmat, use = 'pairwise.complete') %>% 
-    as.data.table() %>% mutate(yyyymm = as.yearmon(datecurr)) 
-  
-  cor_obs = rbind(cor_obs, cmat)
-  
-} # for keyi
+signals_obs = fread(paste0(outpath, 'bc_tmp.csv')) %>% 
+  mutate(yyyymm = round(yyyymm, 3))
 
 
-## read in imputed ----
-cor_imp = data.table()
-for (datecurr in dateliststr){
-  fname = paste0(outpath, 'impute_ests/estR_', datecurr, '.csv')
-  temp = read.csv(fname, row.names = 1) %>% as.matrix() %>% cov2cor() %>% 
-    as.data.table() %>% mutate(yyyymm = as.yearmon(datecurr))
-  cor_imp = rbind(cor_imp, temp)
-} 
+## select dates and make small dataset ----
 
-## merge ----
-cor_dat = rbind(
-  cor_obs %>% mutate(imp_type = 'none')
-  , cor_imp %>% mutate(imp_type = 'mvn')
-) 
+small = signals_mvn[yyyymm %in% datelist] %>% 
+  mutate(imp_type = 'mvn') %>% 
+  rbind(
+    signals_obs[yyyymm %in% datelist] %>% 
+      mutate(imp_type = 'none')
+  )
 
+keylist = small %>% 
+  distinct(
+    imp_type, yyyymm
+  )
 
-# Find eigenvalues and unroll correlations  ---------------------------------------------------------------
-  
-keylist = cor_dat %>% distinct(imp_type,yyyymm)
+# Calculate ----
 
-clist_dat = data.table()
+small %>% names()
+
+# find correlations  
+cor_dat = data.table()
 eig_dat = data.table()
 for (keyi in 1:dim(keylist)[1]){
   
   # select data
   imp_curr = keylist$imp_type[keyi]
   date_curr = keylist$yyyymm[keyi]
-  cmat = cor_dat %>% 
-    filter(imp_type == imp_curr, yyyymm == date_curr) %>% 
-    select(-c(imp_type,yyyymm)) %>% 
-    as.matrix()
   
+  signalmat = small %>% 
+    filter(imp_type == imp_curr, yyyymm == date_curr) %>% 
+    select(
+      -c(permno,yyyymm,imp_type)
+    ) %>% 
+    as.matrix() 
+  
+  # calc correlation
+  cmat = cor(signalmat, use = 'pairwise.complete')
   clist = cmat[lower.tri(cmat)]
   
   # calc eigendecomp
@@ -118,32 +106,29 @@ for (keyi in 1:dim(keylist)[1]){
   # organize
   dt_curr = data.table(
     imp_type = imp_curr
-    , date = as.yearmon(date_curr)
+    , date = date_curr 
     , cor = clist
   )
   
   dt2_curr = data.table(
     imp_type = imp_curr
-    , date = as.yearmon(date_curr)
+    , date = date_curr 
     , n_PC = 1:length(eig)
     , pct_var = pct_var
   )
   
-  clist_dat = rbind(clist_dat, dt_curr)
+  cor_dat = rbind(cor_dat, dt_curr)
   eig_dat = rbind(eig_dat, dt2_curr)
   
 } # for keyi
 
 
 
-
-# Plot --------------------------------------------------------------------
-
-
+# plot ----
 
 # histogram data
-edge = seq(-1,1,0.05)
-histdat = clist_dat %>% 
+edge = seq(-1,1,0.1)
+histdat = cor_dat %>% 
   group_by(imp_type, date) %>% 
   summarize(
     mids = hist(cor, edge)$mids
@@ -153,7 +138,7 @@ histdat = clist_dat %>%
     imp_type = factor(
       imp_type 
       , levels = c('mvn','none')
-      , labels = c('EM Algo','Obs Avail Case')
+      , labels = c('MVN Imputed','Obs Avail Case')
     )
   )
 
@@ -162,7 +147,7 @@ eig_dat2 = eig_dat %>%
     imp_type = factor(
       imp_type 
       , levels = c('mvn','none')
-      , labels = c('EM Algo','Obs Avail Case')
+      , labels = c('MVN Imputed','Obs Avail Case')
     )
   )
 
@@ -170,7 +155,7 @@ eig_dat2 = eig_dat %>%
 for (date_curr in datelist){
   
   # corr dist 
-  p = ggplot(histdat %>% filter(date == as.yearmon(date_curr)), aes(x=mids,y=density)) +
+  p = ggplot(histdat %>% filter(date == date_curr), aes(x=mids,y=density)) +
     geom_line(aes(group = imp_type, color = imp_type, linetype = imp_type), size = 2) +
     chen_theme +
     xlab('Pairwise Correlation') +
@@ -183,14 +168,16 @@ for (date_curr in datelist){
     ) +
     scale_linetype_manual(values = c('solid','31'))
   
+  p
+  
   ggsave(
-    filename = paste0(outpath, '/plots/cor_dist_', floor(date_curr), '.pdf')
+    filename = paste0(outpath, 'plots/old_cor_dist_', floor(date_curr), '.pdf')
     , width = 5, height = 4, scale = 1.5, device = cairo_pdf
   )  
   
   # PCA 
   p2 = ggplot(
-    eig_dat2 %>% filter(date == as.yearmon(date_curr), n_PC <= 10), aes(x=n_PC, y=pct_var)
+    eig_dat2 %>% filter(date == date_curr, n_PC <= 10), aes(x=n_PC, y=pct_var)
   ) +
     geom_line(
       aes(group = imp_type, color = imp_type, linetype = imp_type)
@@ -211,23 +198,38 @@ for (date_curr in datelist){
     coord_cartesian(ylim = c(0,100))
   
   ggsave(
-    filename = paste0(outpath, 'plots/pca_', floor(date_curr), '.pdf')
+    filename = paste0(outpath, 'plots/old_pca_', floor(date_curr), '.pdf')
     , width = 5, height = 4, scale = 1.5, device = cairo_pdf
   )   
-
+  
   
 } # for date_curr
 
 
-# Sanity check ------------------------------------------------------------
+# sanity check ----
 
-# plot differences correlations at the signal-signal level
-dateselect = as.yearmon('Jun 2000')
+# check expect share of missing values
+small %>% filter(imp_type == 'none') %>% summarize_all(function (x) mean(is.na(x)))
+small %>% filter(imp_type == 'mvn') %>% summarize_all(function (x) mean(is.na(x)))
 
-cimp = cor_dat %>% filter(yyyymm == dateselect, imp_type == 'mvn') %>% select(-c(yyyymm, imp_type)) %>% as.matrix()
-cobs = cor_dat %>% filter(yyyymm == dateselect, imp_type == 'none') %>% select(-c(yyyymm, imp_type)) %>% as.matrix()
 
-dc = cimp-cobs
-dc
+# Testing ----
+# eventually we should replace the sample correlation matricies with the ones directly 
+# from the imputation.
 
-hist(dc)
+# read cov matricies
+covmat = fread('impute_ests/estR_Jun1990.csv') %>% 
+  select(-V1) %>% 
+  as.matrix
+rownames(covmat) = colnames(covmat)
+
+
+cormat = cov2cor(covmat)
+
+hist(cormat[lower.tri(cormat)])
+
+eig = eigen(cormat)$value
+
+plot(1:length(eig[1:20]), cumsum(eig[1:20]))
+
+
