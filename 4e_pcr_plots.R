@@ -19,6 +19,7 @@ yrmons <- gsub(
   as.character(seq(as.yearmon("Jan 1995"), as.yearmon("Dec 2020"), by = 1/12))
 )
 
+# check 
 unique(fread('../output/impute_ests/bcn_scale_Apr2000.csv')$variable)
 
 #===============================================================================#
@@ -77,15 +78,19 @@ agg_data <- pcr_all[
     ls_sd = sd(ls_ret, na.rm = T) * sqrt(12)
   ),
   by = .(type, pc, weighting)
-][, ":="( # Sharpe ratios
-  ls_sharpe = ls_mn / ls_sd
-)][,
-   weighting := dplyr::case_when(
-     weighting == "vw_ls" ~ "Value",
-     weighting == "ew_ls" ~ "Equal"
-   )
-]
-
+] %>% 
+  mutate(
+    ls_sharpe = ls_mn / ls_sd
+    , weighting = dplyr::case_when(
+        weighting == "vw_ls" ~ "Value",
+        weighting == "ew_ls" ~ "Equal"
+    )
+    , type = dplyr::case_when(
+      type == 'Mean' ~ 'Naive'
+      , type == 'EM' ~ 'EM'
+    )
+  ) 
+   
 
 # All the line plots will have same basic look
 plot_base <- ggplot(agg_data, aes(x = pc, colour = weighting, linetype = type)) + 

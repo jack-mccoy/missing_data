@@ -9,7 +9,7 @@ library(ggplot2)
 
 datelist = c(1990.5, 2000.5, 2010.5)
 
-outpath = '../output/'
+outpath = '../output_75_least_miss/'
 
 ## Figures Setup ====
 library(gridExtra)

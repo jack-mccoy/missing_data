@@ -641,53 +641,6 @@ imputeVec <- function(x, na.rm = T) {
   return(x)
 }
 
-#-------------------------------------------------------------------------------
-# Missingness plot 
-#-------------------------------------------------------------------------------
-missPlot <- function(data, rhs_vars, xlab = "Stock i.d.", ylab = "Anomaly i.d.",
-  title = "Missingness Map"
-) {
-  data2 <- copy(as.data.table(data))
-
-  nas <- is.na(data2[,..rhs_vars])
-
-  sort_by_na <- do.call("order", as.data.table(is.na(data2)))
-
-  nas <- as.data.table(nas)[sort_by_na]
-
-  col_miss <- colSums(nas)
-  col_ind <- order(-col_miss) 
-  nas <- nas[, ..col_ind]
-  signal_id <- data.table(variable = colnames(nas), 
-    id = factor(ncol(nas):1, levels = ncol(nas):1)) 
-  nas[, firm_id := 1:nrow(nas)]
-
-  ratio <- nrow(nas)*1/(ncol(nas) - 1)
-  nas_long <- merge(melt(nas, id = "firm_id"), signal_id, by = "variable") 
-
-  miss_plot <- ggplot(data = nas_long, aes(x = firm_id, y = id)) + 
-    geom_raster(aes(fill = value)) +
-    labs(x = xlab, y = ylab, color = "") + 
-    scale_fill_manual(
-      name = "",
-      labels = c("Present","Missing"),
-      values = c("white", "indianred3")
-    ) + 
-    theme_bw() +
-    theme(
-      panel.grid.major = element_blank(),
-      panel.grid.minor = element_blank(),
-      panel.background = element_blank(),
-      legend.position = "bottom",
-      legend.background = element_rect(fill = "lightgrey")
-    ) +
-    scale_x_continuous(expand = c(0,0)) +
-    scale_y_discrete(breaks = seq(0, ncol(nas), by = 25)) +
-    ggtitle(title)# + 
-    #coord_fixed(ratio)
-  
-  return(miss_plot)
-}
 
 #-------------------------------------------------------------------------------
 # Sharpe table 

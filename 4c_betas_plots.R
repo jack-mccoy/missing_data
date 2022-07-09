@@ -1,6 +1,6 @@
 
 #==============================================================================#
-# Libraries and functions
+# Libraries and functions ----
 #==============================================================================#
 
 library(data.table)
@@ -10,7 +10,7 @@ library(zoo)
 source("functions.R")
 
 #==============================================================================#
-# Hardcodes
+# Hardcodes ----
 #==============================================================================#
 
 # where we're pulling data and storing plots 
@@ -25,7 +25,7 @@ data_file <- paste0(data_path, "bc_tmp.csv")
 dates <- as.yearmon(c("Jun 1990", "Jun 2000", "Jun 2010"))
 
 #==============================================================================#
-# Read in data
+# Read in data ----
 #==============================================================================#
 
 # Read in the covariance matrices
@@ -45,7 +45,7 @@ data <- fread(data_file)[as.yearmon(yyyymm) %in% dates][order(permno)]
 data[, yyyymm := as.yearmon(yyyymm)]
 
 #==============================================================================#
-# Extract betas
+# Extract betas ----
 #==============================================================================#
 
 # for each month, get each observation's coefficients
@@ -72,12 +72,12 @@ beta_dt[, beta_winsor := winsorize(V1)]
 rm(beta_lists, all_the_betas)
 
 #==============================================================================#
-# Plot
+# Plot ----
 #==============================================================================#
 
 # make the density plot of the beta values
 beta_dist <- ggplot(data = beta_dt, aes(x = V1, group = month)) + 
-  geom_density(aes(colour = month, linetype = month)) +
+  geom_density(aes(colour = month, linetype = month), size = 1) +
   labs(
     x = "Imputation Slope",
     y = "Density",
@@ -90,20 +90,24 @@ beta_dist <- ggplot(data = beta_dt, aes(x = V1, group = month)) +
   ) + 
   scale_y_continuous(
     expand = expand_scale(mult = c(0,0.05), add = 0),
-    breaks = seq(0,10,0.5)
+    breaks = seq(0,10,2)
   ) +
   theme_bw() + 
   theme(
     legend.position = c(0.8, 0.8),
+    legend.title = element_blank(),
     legend.box.background = element_rect(colour = "black"),
     panel.grid = element_line(colour = "grey", size = 0.2),
+    axis.text = element_text(size = 13),
     text = element_text(size = 15)
   ) 
 
-#==============================================================================#
-# Output the plots
-#==============================================================================#
+# beta_dist
 
-# save
-ggsave(plot = beta_dist, filename = paste0(plot_path, "beta_dist.pdf"))
+
+# Output the plots
+ggsave(plot = beta_dist
+       , filename = paste0(plot_path, "beta_dist.pdf")
+       , height = 4, width = 8, scale = 0.9
+     )
 

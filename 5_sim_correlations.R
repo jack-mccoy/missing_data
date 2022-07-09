@@ -1,6 +1,6 @@
 # Simulating correlations to illustrate link between dimensionality and imputation slopes
-# "A" prefix indicates this is separate from the rest of the repo
-# Andrew 2022 05
+# This does not depend on any of the other scripts
+# Created 2022 05
 
 
 # Setup ====
@@ -133,7 +133,7 @@ chen_theme =   theme_minimal() +
 # Sim + Plots ====
 
 ## settings ====
-d = 75
+d = 125
 p_width = 4
 p_height = 1.3
 p_scale = 3
@@ -141,7 +141,7 @@ p_scale = 3
 ## Low Dim Simulation ====
 
 # simulate data
-dat = simulate_slopes(betaparam = 1.2)
+dat = simulate_slopes(betaparam = 1.2, d = d)
 
 
 # correlation histogram
@@ -190,7 +190,7 @@ p_all = grid.arrange(p_corr, p_pca, p_slopes, nrow = 1)
 
 
 ggsave(
-  plot = p_all, filename = '../output/sim impute a.pdf'
+  plot = p_all, filename = '../output/plots/sim impute a.pdf'
   , width = p_width, height = p_height, scale = p_scale, device = cairo_pdf
 )
 
@@ -199,7 +199,7 @@ ggsave(
 ## Med Dim Simulation ====
 
 # simulate data
-dat = simulate_slopes(betaparam = 4)
+dat = simulate_slopes(betaparam = 4, d = d)
 
 
 # correlation histogram
@@ -248,7 +248,7 @@ p_all = grid.arrange(p_corr, p_pca, p_slopes, nrow = 1)
 
 
 ggsave(
-  plot = p_all, filename = '../output/sim impute b.pdf'
+  plot = p_all, filename = '../output/plots/sim impute b.pdf'
   , width = p_width, height = p_height, scale = p_scale, device = cairo_pdf
 )
 
@@ -257,7 +257,7 @@ ggsave(
 ## High Dim Simulation ====
 
 # simulate data
-dat = simulate_slopes(betaparam = 10)
+dat = simulate_slopes(betaparam = 15, d = d)
 
 
 # correlation histogram
@@ -305,7 +305,7 @@ p_slopes = ggplot(hdat, aes(x=mids, y=freq)) +
 p_all = grid.arrange(p_corr, p_pca, p_slopes, nrow = 1)
 
 ggsave(
-  plot = p_all, filename = '../output/sim impute c.pdf'
+  plot = p_all, filename = '../output/plots/sim impute c.pdf'
   , width = p_width, height = p_height, scale = p_scale, device = cairo_pdf
 )
 
