@@ -13,19 +13,12 @@ datelist = as.yearmon(dateliststr)
 
 outpath = '../output/'
 
+
+
 ## Figures Setup ====
 library(gridExtra)
 library(latex2exp)
 library(extrafont)
-
-
-MATBLUE = rgb(0,0.4470,0.7410)
-MATRED = rgb(0.8500, 0.3250, 0.0980)
-MATYELLOW = rgb(0.9290, 0.6940, 0.1250)
-
-NICEBLUE = "#619CFF"
-NICEGREEN = "#00BA38"
-NICERED = "#F8766D"
 
 
 # read in data ----
@@ -38,6 +31,7 @@ signals_obs = signals_obs[ , yyyymm := as.yearmon(yyyymm)][yyyymm %in% datelist]
 
 # convert to covariance matricies
 cor_obs = data.table()
+n_obs = data.table()
 for (datecurr in datelist){
   
   # select data
@@ -50,7 +44,14 @@ for (datecurr in datelist){
   cmat = cor(signalmat, use = 'pairwise.complete') %>% 
     as.data.table() %>% mutate(yyyymm = as.yearmon(datecurr)) 
   
+  # count number of pairwise obs
+  obsmat = 1*!is.na(signalmat) %>% as.matrix
+  nmat = t(obsmat) %*% obsmat %>% 
+    as.data.table() %>% mutate(yyyymm = as.yearmon(datecurr)) 
+  
+  # bind
   cor_obs = rbind(cor_obs, cmat)
+  n_obs = rbind(n_obs, nmat)
   
 } # for keyi
 
@@ -139,63 +140,16 @@ eig_dat2 = eig_dat %>%
     )
   )
 
-# Plot --------------------------------------------------------------------
+# Plot cor and eig --------------------------------------------------------------------
 
-chen_theme =   theme_minimal() +
-  theme(
-    text = element_text(family = "Palatino Linotype")
-    , panel.border = element_rect(colour = "black", fill=NA, size=1)    
-    
-    # Font sizes
-    , axis.title.x = element_text(size = 26),
-    axis.title.y = element_text(size = 26),
-    axis.text.x = element_text(size = 26),
-    axis.text.y = element_text(size = 26),
-    legend.text = element_text(size = 22),
-    
-    # Tweaking legend
-    legend.position = c(0.7, 0.8),
-    legend.text.align = 0,
-    legend.background = element_rect(fill = "white", color = "black"),
-    legend.margin = margin(t = 5, r = 2, b = 5, l = 5), 
-    legend.key.size = unit(1.8, "cm"), 
-    legend.spacing.x = unit(0.001, 'cm'),
-    legend.title = element_blank()    
-  ) 
 
+line_size = 2.8
+
+## corr dist ----
 for (date_curr in datelist){
   
-  ## Delta corr ----
-  # date_curr = datelist[2]
-  cimp = cor_dat %>% filter(yyyymm == date_curr, imp_type == 'mvn') %>% select(-c(yyyymm, imp_type)) %>% as.matrix()
-  cobs = cor_dat %>% filter(yyyymm == date_curr, imp_type == 'none') %>% select(-c(yyyymm, imp_type)) %>% as.matrix()
-  
-  dc = cimp-cobs
-  dclist = tibble(dc = dc[lower.tri(dc)])
-  
-  fac = 10
-  edge = seq(-1,1,0.05/fac)
-  plotme = dclist %>% 
-    summarize(
-      mids = hist(dc, edge)$mids
-      , density = hist(dc, edge)$density/fac
-    )
-  
-  p_dc = ggplot(plotme, aes(x=mids, y=density)) +
-    geom_line(size = 2, color = 'gray') +
-    coord_cartesian(xlim = c(-0.25,+0.25))+
-    chen_theme +
-    xlab('Difference in Correlation')
-  
-  ggsave(
-    filename = paste0(outpath, '/plots/dcor_dist_', floor(date_curr), '.pdf')
-    , width = 5, height = 4, scale = 1.5, device = cairo_pdf
-  )  
-  
-  
-  # corr dist ----
   p = ggplot(histdat %>% filter(date == as.yearmon(date_curr)), aes(x=mids,y=density)) +
-    geom_line(aes(group = imp_type, color = imp_type, linetype = imp_type), size = 2) +
+    geom_line(aes(group = imp_type, color = imp_type, linetype = imp_type), size = line_size) +
     chen_theme +
     xlab('Pairwise Correlation') + ylab('Density') +
     theme(legend.position = c(2.5,8)/10) +
@@ -213,15 +167,16 @@ for (date_curr in datelist){
     , width = 5, height = 4, scale = 1.5, device = cairo_pdf
   )  
   
+} # for datecur
+
+
+## eig ----
+for (date_curr in datelist){
   
-  # PCA ----
   p2 = ggplot(
     eig_dat2 %>% filter(date == as.yearmon(date_curr), n_PC <= 10), aes(x=n_PC, y=pct_var)
   ) +
-    geom_line(
-      aes(group = imp_type, color = imp_type, linetype = imp_type)
-      , size = 2
-    ) +
+    geom_line(aes(group = imp_type, color = imp_type, linetype = imp_type), size = line_size) +
     chen_theme +
     xlab('Number of PCs') +
     ylab('Frequency') +
@@ -241,34 +196,77 @@ for (date_curr in datelist){
     filename = paste0(outpath, 'plots/pca_', floor(date_curr), '.pdf')
     , width = 5, height = 4, scale = 1.5, device = cairo_pdf
   )   
-
+  
   
 } # for date_curr
 
 
-# Sanity check ------------------------------------------------------------
 
-datelist = cor_dat$yyyymm %>% unique()
-
-
-date_curr = datelist[1]
-cobs = cor_dat %>% filter(yyyymm == datecurr, imp_type == 'none') %>% select(-c(yyyymm, imp_type)) %>% as.matrix()
-quantile(cobs)
+# Plot deltas --------------------------------------------------------------------
 
 
-date_curr = datelist[2]
-cobs = cor_dat %>% filter(yyyymm == datecurr, imp_type == 'none') %>% select(-c(yyyymm, imp_type)) %>% as.matrix()
-quantile(cobs)
+## level difference ----
+edge = seq(-1,1,0.05/10)
 
-date_curr = datelist[3]
-cobs = cor_dat %>% filter(yyyymm == datecurr, imp_type == 'none') %>% select(-c(yyyymm, imp_type)) %>% as.matrix()
-quantile(cobs)
+for (date_curr in datelist){
+
+  cimp = cor_dat %>% filter(yyyymm == date_curr, imp_type == 'mvn') %>% select(-c(yyyymm, imp_type)) %>% as.matrix()
+  cobs = cor_dat %>% filter(yyyymm == date_curr, imp_type == 'none') %>% select(-c(yyyymm, imp_type)) %>% as.matrix()
+  
+  dc = cimp-cobs
+  dclist = tibble(dc = dc[lower.tri(dc)])
+  
+  dpct = dc/abs(cobs)*100
+
+  
+  plotme = dclist %>% 
+    summarize(
+      mids = hist(dc, edge)$mids
+      , density = hist(dc, edge)$density
+    )
+  
+  p_dc = ggplot(plotme, aes(x=mids, y=density)) +
+    geom_line(size = 2, color = 'gray') +
+    coord_cartesian(xlim = c(-0.2,+0.2))+
+    chen_theme +
+    xlab('Difference in Correlation (EM vs Obs)')
+  
+  ggsave(
+    filename = paste0(outpath, '/plots/dcor_dist_', floor(date_curr), '.pdf')
+    , width = 7, height = 4, scale = 1.5, device = cairo_pdf
+  )  
+  
+} # end for date_curr
 
 
+## pct difference ----
+edge = seq(-500,500,10)
 
-# ----
-cobs = cor_dat %>% filter(yyyymm == datelist[], imp_type == 'none') %>% 
-  select(-c(yyyymm, imp_type)) %>% as.matrix()
-cobs[1:4,1:4]
-sd(cobs[1:4,1:4])
-sd(cobs)
+for (date_curr in datelist){
+  
+  cimp = cor_dat %>% filter(yyyymm == date_curr, imp_type == 'mvn') %>% select(-c(yyyymm, imp_type)) %>% as.matrix()
+  cobs = cor_dat %>% filter(yyyymm == date_curr, imp_type == 'none') %>% select(-c(yyyymm, imp_type)) %>% as.matrix()
+  
+  dc = cimp-cobs
+  dpct = dc/abs(cobs)*100
+  
+  plotme = tibble(dpct = dpct[lower.tri(dpct)])  %>% 
+    filter(dpct >= min(edge), dpct <= max(edge)) %>% 
+    summarize(
+      mids = hist(dpct, edge)$mids
+      , density = hist(dpct, edge)$density
+    )
+  
+  p_dpct = ggplot(plotme, aes(x=mids, y=density)) +
+    geom_line(size = 2, color = 'gray') +
+    coord_cartesian(xlim = 200*c(-1,+1))+
+    chen_theme +
+    xlab('% Difference in Corr (EM vs Obs)')
+  
+  ggsave(
+    filename = paste0(outpath, '/plots/dpct_dist_', floor(date_curr), '.pdf')
+    , width = 7, height = 4, scale = 1.5, device = cairo_pdf
+  )  
+  
+} # end for date_curr
+

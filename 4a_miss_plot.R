@@ -58,8 +58,8 @@ missPlot <- function(data, rhs_vars, xlab = "Stock i.d.", ylab = "Predictor i.d.
     labs(x = xlab, y = ylab, color = "") + 
     scale_fill_manual(
       name = "",
-      labels = c("Present","Missing"),
-      values = c("white", "indianred3")
+      labels = c("Observed","Missing"),
+      values = c('lightgrey', MATRED)
     ) + 
     theme_bw() +
     theme(
@@ -67,8 +67,7 @@ missPlot <- function(data, rhs_vars, xlab = "Stock i.d.", ylab = "Predictor i.d.
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
       panel.background = element_blank(),
-      legend.position = "top",
-      legend.background = element_rect(fill = "lightgrey")
+      legend.position = "top"
     ) +
     scale_x_continuous(expand = c(0,0), breaks = c(1,seq(1000,12000,1000))) +
     scale_y_discrete(breaks = c(1, seq(0, ncol(nas), by = 25))) +

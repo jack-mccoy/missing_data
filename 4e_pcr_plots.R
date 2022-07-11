@@ -7,6 +7,7 @@ library(data.table)
 library(ggplot2)
 library(gridExtra)
 library(zoo)
+source('functions.R')
 
 #===============================================================================#
 # Hardcodes ----
@@ -113,7 +114,8 @@ plot_base <- ggplot(agg_data, aes(x = pc, colour = weighting, linetype = type)) 
   ) +
   guides(
     colour = guide_legend(order = 1), linetype = guide_legend(order = 2)
-  )
+  ) +
+  scale_color_manual(values = c(MATRED, MATBLUE))
 
 mn <- plot_base + geom_line(aes(y = ls_mn)) + 
   ylab("Annualized Mean Return (%)")
