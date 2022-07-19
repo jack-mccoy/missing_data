@@ -7,6 +7,7 @@ library(data.table)
 library(ggplot2)
 library(gridExtra)
 library(zoo)
+library(dplyr)
 source('functions.R')
 
 #===============================================================================#
@@ -87,8 +88,8 @@ agg_data <- pcr_all[
         weighting == "ew_ls" ~ "Equal"
     )
     , type = dplyr::case_when(
-      type == 'Mean' ~ 'Naive'
-      , type == 'EM' ~ 'EM'
+      type == 'Mean' ~ 'Simple Mean'
+      , type == 'EM' ~ 'EM Algo'
     )
   ) 
    
@@ -97,7 +98,7 @@ agg_data <- pcr_all[
 plot_base <- ggplot(agg_data, aes(x = pc, colour = weighting, linetype = type)) + 
   theme_bw() + 
   theme(
-    legend.position = c(23,85)/100,
+    legend.position = c(27, 85)/100,
     legend.background = element_blank(),
     legend.key = element_blank(),
     legend.spacing.y = unit(0.01, 'cm'),

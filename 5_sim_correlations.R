@@ -5,6 +5,7 @@
 
 # Setup ====
 library(tidyverse)
+library(pracma) # for psuedo inverse
 
 # random correlations based on Lewandowski et al 
 # https://stats.stackexchange.com/questions/124538/how-to-generate-a-large-full-rank-random-correlation-matrix-with-some-strong-cor
@@ -58,7 +59,9 @@ simulate_slopes = function(
       iobs = iall[iall != i]
       iobs = sample(iobs, nobs)
       Cov = corrmat[i,iobs]
-      Sinv = solve(corrmat[iobs,iobs])
+      # Sinv = solve(corrmat[iobs,iobs])
+      Sinv = pinv(corrmat[iobs,iobs])
+      
       
       if (i==1){
         slopes = Cov %*% Sinv
@@ -141,7 +144,9 @@ p_scale = 3
 ## Low Dim Simulation ====
 
 # simulate data
-dat = simulate_slopes(betaparam = 1.2, d = d)
+dat = simulate_slopes(betaparam = 1.2, d = d, nobs = round(d/3))
+
+# dat = simulate_slopes(betaparam = 1.2, d = d, nobs = 40)
 
 
 # correlation histogram
@@ -194,12 +199,13 @@ ggsave(
   , width = p_width, height = p_height, scale = p_scale, device = cairo_pdf
 )
 
-
+mean(abs(dat$slopes))
+median(abs(dat$slopes))
 
 ## Med Dim Simulation ====
 
 # simulate data
-dat = simulate_slopes(betaparam = 4, d = d)
+dat = simulate_slopes(betaparam = 4, d = d, nobs = round(d/3))
 
 
 # correlation histogram
@@ -252,12 +258,14 @@ ggsave(
   , width = p_width, height = p_height, scale = p_scale, device = cairo_pdf
 )
 
+mean(abs(dat$slopes))
+median(abs(dat$slopes))
 
 
 ## High Dim Simulation ====
 
 # simulate data
-dat = simulate_slopes(betaparam = 15, d = d)
+dat = simulate_slopes(betaparam = 15, d = d, nobs = round(d/3))
 
 
 # correlation histogram
@@ -309,4 +317,7 @@ ggsave(
   , width = p_width, height = p_height, scale = p_scale, device = cairo_pdf
 )
 
+
+mean(abs(dat$slopes))
+median(abs(dat$slopes))
 

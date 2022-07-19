@@ -6,7 +6,7 @@ library(data.table)
 library(tidyverse)
 library(ggplot2)
 library(zoo)
-
+source('functions.R')
 
 dateliststr = c('Jun1990', 'Jun2000', 'Jun2010')
 datelist = as.yearmon(dateliststr)
@@ -127,7 +127,7 @@ histdat = clist_dat %>%
     imp_type = factor(
       imp_type 
       , levels = c('mvn','none')
-      , labels = c('EM Algo','Obs Avail Case')
+      , labels = c('EM Algo','Observed')
     )
   )
 
@@ -136,7 +136,7 @@ eig_dat2 = eig_dat %>%
     imp_type = factor(
       imp_type 
       , levels = c('mvn','none')
-      , labels = c('EM Algo','Obs Avail Case')
+      , labels = c('EM Algo','Observed')
     )
   )
 
@@ -229,7 +229,7 @@ for (date_curr in datelist){
     geom_line(size = 2, color = 'gray') +
     coord_cartesian(xlim = c(-0.2,+0.2))+
     chen_theme +
-    xlab('Difference in Correlation (EM vs Obs)')
+    xlab('Difference in Correlation (EM vs Observed)')
   
   ggsave(
     filename = paste0(outpath, '/plots/dcor_dist_', floor(date_curr), '.pdf')
@@ -261,7 +261,7 @@ for (date_curr in datelist){
     geom_line(size = 2, color = 'gray') +
     coord_cartesian(xlim = 200*c(-1,+1))+
     chen_theme +
-    xlab('% Difference in Corr (EM vs Obs)')
+    xlab('% Difference in Corr (EM vs Observed)')
   
   ggsave(
     filename = paste0(outpath, '/plots/dpct_dist_', floor(date_curr), '.pdf')

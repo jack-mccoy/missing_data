@@ -111,3 +111,12 @@ ggsave(plot = beta_dist
        , height = 4, width = 8, scale = 0.9
      )
 
+
+
+# Numbers for the text ---------------------------------------------------
+
+mean(abs(beta_dt$V1))
+
+quantile(beta_dt$V1, c(2.5,5,50,95,97.5)/100)
+
+hist(beta_dt$beta_winsor)

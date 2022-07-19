@@ -18,8 +18,10 @@ source("functions.R")
 
 
 #==============================================================================#
-# Read in data (cts only) ----
+# Read and select data ----
 #==============================================================================#
+
+## read ----
 
 # Read in the downloadable signals 
 signals <- fread("../data/signed_predictors_dl_wide.csv") 
@@ -37,7 +39,7 @@ signaldoc = fread('../data/SignalDoc.csv')  %>%
     signalname = Acronym
   ) %>% 
   select(
-    signalname, Authors, Year, starts_with('Cat.')
+    signalname, Authors, Year, starts_with('Cat.'), starts_with('Sample')
   ) %>% 
   mutate(signalname = tolower(signalname)) %>% 
   filter(
@@ -54,9 +56,35 @@ obs = signals %>%
   # keep only if streversal is observed
   filter(streversal == 1)
 
-# drop discrete
+## drop discrete ----
 list_cts = signaldoc[Cat.Form == 'continuous'] %>% pull(signalname)
 obs = obs %>% select(yyyymm,permno,all_of(list_cts))
+
+## drop signals with gaps ----
+
+# user
+date_start = 1985
+date_end = 2020
+
+# find totally-missing-months
+obs_by_date = obs[
+  , by = yyyymm
+  , lapply(.SD, sum)
+  , .SDcols = !c('permno','yyyymm')
+] %>% 
+  pivot_longer(cols = -c('yyyymm'), names_to = 'signalname', values_to = 'obs') %>% 
+  group_by(signalname)
+
+# find gaps
+gaps_all = obs_by_date %>% 
+  filter(
+    yyyymm >= date_start, yyyymm <= date_end, obs < 2
+  ) %>% 
+  arrange(signalname, yyyymm) 
+
+list_gap = gaps_all %>% distinct(signalname, .keep_all = T) %>% pull(signalname)
+
+obs = obs %>% select(-c(list_gap)) 
 
 gc()
 
@@ -80,9 +108,7 @@ small = obs %>% filter(yyyymm %in% datelist)
 
 
 ## One signal summaries ----
-# dateselect = as.yearmon(c('Jun 1970','Jun 1980','Jun 1990','Jun 2000','Jun 2010'))
-# dateselect = as.yearmon(c('Jun 1975','Jun 1985','Jun 1995','Jun 2005','Jun 2015'))
-dateselect = as.yearmon(c('Jun 1970','Jun 1975','Jun 1980','Jun 1985','Jun 1990', 'Jun 2000'))
+dateselect = as.yearmon(c('Jun 1970','Jun 1975','Jun 1980','Jun 1985','Jun 1990', 'Jun 1995', 'Jun 2000'))
 ptile = c(5, 25, 50, 75, 95)
 
 # one-signal sum
@@ -194,29 +220,6 @@ pct_obs_by_nsignal
 # Final lists of signals ----
 #==============================================================================#
 
-## flag bad signals ----
-
-# user
-date_start = 1985
-date_end = 2020
-
-# find totally-missing-months
-obs_by_date = obs[
-  , by = yyyymm
-  , lapply(.SD, sum)
-  , .SDcols = !c('permno','yyyymm')
-] %>% 
-  pivot_longer(cols = -c('yyyymm'), names_to = 'signalname', values_to = 'obs') %>% 
-  group_by(signalname)
-
-# find gaps
-gaps_all = obs_by_date %>% 
-  filter(
-    yyyymm >= date_start, yyyymm <= date_end, obs < 2
-  ) %>% 
-  arrange(signalname, yyyymm) 
-
-list_gap = gaps_all %>% distinct(signalname, .keep_all = T) %>% pull(signalname)
 
 
 ## find lists ----
@@ -292,8 +295,6 @@ write.csv(signaldoc2, '../data/signals_best_doc.csv', row.names = F)
 #==============================================================================#
 
 
-
-
 ## final list (baseline) ----
 final_list = signaldoc2 %>% 
   mutate(
@@ -320,6 +321,32 @@ print(outputtable1,
       only.contents = TRUE,
       file = '../output/plots/final_list.tex')
 
+
+## long list ----
+final_list = signaldoc2 %>% 
+  mutate(
+    AuthorYear = paste0(Authors, ' ', Year)
+  ) %>% 
+  select(
+    signalname, AuthorYear, pct_obs_1985, rank1985
+  ) %>% 
+  arrange(rank1985) %>% 
+  filter(rank1985 <= 999) 
+
+
+# Create Latex output table 1: Clear Predictors
+outputtable1 <- xtable(
+  final_list 
+  , digits = c(0,0,0,1,0)
+)
+
+
+print(outputtable1,
+      include.rownames = FALSE,
+      include.colnames = FALSE,
+      hline.after = NULL,
+      only.contents = TRUE,
+      file = '../output/plots/long_list.tex')
 
 
 
@@ -399,3 +426,13 @@ signaldoc %>% filter(Cat.Data == 'Analyst') %>%
   select(signalname, mean_pct_obs, rank, best100) %>% 
   filter(!is.na(rank)) %>% 
   arrange(rank)
+
+## selected signal for intro ----
+
+signalname = 'announcementreturn'
+signaldoc[signalname == 'announcementreturn']
+
+temp = obs[yyyymm >= 1977 & yyyymm <= 1992, .(permno, yyyymm, announcementreturn)] 
+
+mean(temp$announcementreturn)
+
