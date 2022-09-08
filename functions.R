@@ -15,10 +15,11 @@ library(ggplot2)      # missingness plot
 #-------------------------------------------------------------------------------#
 # Wrapper for mean-variance EM in Fortran
 #-------------------------------------------------------------------------------#
-mvn_emf <- function(y, E0, R0, tol = 1e-6, maxiter = 1e3) {
+mvn_emf <- function(y, E0, R0, update_estE = TRUE, 
+    tol = 1e-6, maxiter = 1e3) {
   
-  if (!is.loaded('mvn_emf')) {
-    dyn.load("mvn_emf.so")
+  if (!is.loaded('mvn_emf_v2')) {
+    dyn.load("mvn_emf_v2.so")
   }
   
   N <- nrow(y)
@@ -27,11 +28,12 @@ mvn_emf <- function(y, E0, R0, tol = 1e-6, maxiter = 1e3) {
   y[nan.index] <- 0
   
   fvals <- .Fortran(
-    "mvn_emf", Ey = as.double(y),
+    "mvn_emf_v2", Ey = as.double(y),
     estE = as.double(E0), estR = as.double(R0),
     nan.index = as.logical(nan.index),
     tol = as.double(tol), maxiter = as.integer(maxiter),
-    K = as.integer(K), N = as.integer(N)
+    K = as.integer(K), N = as.integer(N),
+    update_estE = update_estE
   )
   
   fvals$Ey <- matrix(fvals$Ey,N,K)

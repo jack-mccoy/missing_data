@@ -14,7 +14,8 @@ source('functions.R')
 # Hardcodes ----
 #===============================================================================#
 
-data_dir <- "../output/pcr_returns/"
+out_path <- "../output_best125_1985_fixedmns/"
+data_dir <- paste0(out_path, "pcr_returns/")
 
 yrmons <- gsub(
   "[[:space:]]", "",
@@ -22,7 +23,7 @@ yrmons <- gsub(
 )
 
 # check 
-unique(fread('../output/impute_ests/bcn_scale_Apr2000.csv')$variable)
+unique(fread(paste0(out_path, 'impute_ests/bcn_scale_Apr2000.csv'))$variable)
 
 #===============================================================================#
 # Pull in and format data ----
@@ -134,11 +135,11 @@ out_grid <- marrangeGrob(
 
 
 ggsave(plot = mn, 
-       filename = "../output/plots/pcr_expected_rets.pdf",
+       filename = paste0(out_path, "plots/pcr_expected_rets.pdf"),
        width = 8, height = 5, unit = "in", scale = scale_gg)
 
 ggsave(plot = sharpe, 
-       filename = "../output/plots/pcr_sharpes.pdf",
+       filename = paste0(out_path, "plots/pcr_sharpes.pdf"),
        width = 8, height = 5, unit = "in", scale = scale_gg)
 
 

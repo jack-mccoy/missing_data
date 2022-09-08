@@ -257,7 +257,8 @@ imp_par <- foreach::"%dopar%"(foreach::foreach(i = as.character(yrmons)), {
 
     # Imputation algorithm ----
 
-    em_out <- mvn_emf(raw_i, E0, R0, maxiter = opt$maxiter, tol = opt$tol)
+    em_out <- mvn_emf(raw_i, E0, R0, maxiter = opt$maxiter, tol = opt$tol,
+        update_estE = FALSE)
 
     # Ensure that imputation converged
     if (em_out$maxiter >= opt$maxiter & opt$force_convergence) {
@@ -266,7 +267,8 @@ imp_par <- foreach::"%dopar%"(foreach::foreach(i = as.character(yrmons)), {
         em_out <- mvn_emf(raw_i, 
             em_out$estE, em_out$estR, 
             maxiter = opt$maxiter, 
-            tol = opt$tol)
+            tol = opt$tol,
+            update_estE = FALSE)
       }
     }
 

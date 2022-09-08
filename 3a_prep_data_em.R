@@ -171,7 +171,7 @@ imputed <- foreach::"%dopar%"(foreach::foreach(i = yrmons), {
 
   imp_i <- mvn_emf(as.matrix(tmp[, .SD, .SDcols = good]), 
     E0 = estE[good], R0 = estR[good, good], 
-    tol = 1e-4, maxiter = 100)$Ey # Most of these should be converging quickly  
+    tol = 1e-4, maxiter = 100, update_estE = FALSE)$Ey # Most of these should be converging quickly  
 
   colnames(imp_i) <- good # set the correct names
 

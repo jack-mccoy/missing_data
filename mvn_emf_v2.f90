@@ -139,7 +139,7 @@ iterloop: do iter=1,maxiter
    ! ==== update estimates (M-step) ====
    
    ! Update mean 
-   if update_estE then
+   if ( update_estE ) then
 	   do j=1,K
 		  Enew(j)=sum(Ey(:,j))/N
 	   end do
