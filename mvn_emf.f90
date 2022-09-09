@@ -8,7 +8,7 @@
 ! ins
 !	NAindex = indexes of missing values
 
-subroutine mvn_emf(Ey, estE, estR, NAindex, tol, maxiter, K, N)
+subroutine mvn_emf(Ey, estE, estR, NAindex, tol, maxiter, K, N, update_estE)
 	
 implicit none
 
@@ -18,6 +18,7 @@ double precision Ey(N,K), estE(K), estR(K,K)
 logical NAindex(N,K)
 double precision tol
 integer maxiter
+logical update_estE ! .true. updates estE in each iteration (default).  .false. uses inputted estE throughout.
 
 !declare other stuff
 integer i,j,iter,NAcount,info
@@ -138,9 +139,13 @@ iterloop: do iter=1,maxiter
    ! ==== update estimates (M-step) ====
    
    ! Update mean 
-   do j=1,K
-      Enew(j)=sum(Ey(:,j))/N
-   end do
+   if ( update_estE ) then
+	   do j=1,K
+		  Enew(j)=sum(Ey(:,j))/N
+	   end do
+   else
+	   Enew = estE
+   end if
    
    ! Update covariance
    !Rnew := Eyy + Enew*Enew'

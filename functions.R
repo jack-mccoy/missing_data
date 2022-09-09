@@ -18,8 +18,8 @@ library(ggplot2)      # missingness plot
 mvn_emf <- function(y, E0, R0, update_estE = TRUE, 
     tol = 1e-6, maxiter = 1e3) {
   
-  if (!is.loaded('mvn_emf_v2')) {
-    dyn.load("mvn_emf_v2.so")
+  if (!is.loaded('mvn_emf')) {
+    dyn.load("mvn_emf.so")
   }
   
   N <- nrow(y)
@@ -28,7 +28,7 @@ mvn_emf <- function(y, E0, R0, update_estE = TRUE,
   y[nan.index] <- 0
   
   fvals <- .Fortran(
-    "mvn_emf_v2", Ey = as.double(y),
+    "mvn_emf", Ey = as.double(y),
     estE = as.double(E0), estR = as.double(R0),
     nan.index = as.logical(nan.index),
     tol = as.double(tol), maxiter = as.integer(maxiter),
