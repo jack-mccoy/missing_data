@@ -14,7 +14,7 @@ source("functions.R")
 #==============================================================================#
 
 # where we're pulling data and storing plots 
-data_path <- "../output_best125_1985_fixedmns/"
+data_path <- "../output/"
 ests_path <- paste0(data_path, "impute_ests/")
 plot_path <- paste0(data_path, "plots/")
 

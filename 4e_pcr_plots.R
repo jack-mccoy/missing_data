@@ -14,7 +14,7 @@ source('functions.R')
 # Hardcodes ----
 #===============================================================================#
 
-out_path <- "../output_best125_1985_fixedmns/"
+out_path <- "../output/"
 data_dir <- paste0(out_path, "pcr_returns/")
 
 yrmons <- gsub(
