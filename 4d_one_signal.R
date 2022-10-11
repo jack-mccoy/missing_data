@@ -195,13 +195,13 @@ imp_sum = signal_sum_wide %>%
   summarize(
     percentile = qlist*100
     , blank = NA*qlist
-    , rbar_mvn = quantile(rbar_mvn, qlist)    
-    , rbar_simple = quantile(rbar_simple, qlist)
-    , rbar_mvn_less_simple = quantile(rbar_diff, qlist)        
+    , rbar_mvn = quantile(rbar_mvn, qlist, na.rm = TRUE)    
+    , rbar_simple = quantile(rbar_simple, qlist, na.rm = TRUE)
+    , rbar_mvn_less_simple = quantile(rbar_diff, qlist, na.rm = TRUE)        
     , blank2 = NA*qlist
-    , sr_mvn = quantile(sr_mvn, qlist)    
-    , sr_simple = quantile(sr_simple, qlist)
-    , sr_mvn_less_simple = quantile(sr_diff, qlist)
+    , sr_mvn = quantile(sr_mvn, qlist, na.rm = TRUE)    
+    , sr_simple = quantile(sr_simple, qlist, na.rm = TRUE)
+    , sr_mvn_less_simple = quantile(sr_diff, qlist, na.rm = TRUE)
     , blank3 = NA*qlist    
   ) 
 
