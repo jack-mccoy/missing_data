@@ -3,11 +3,12 @@
 # Parameters to control the jobs
 start_yr=1995
 end_yr=2020
-tmp_file_imp="../output/imp_tmp.csv"
-tmp_file_bc="../output/bc_tmp.csv"
+main_path="../output/"
+tmp_file_imp="$main_path/imp_tmp.csv"
+tmp_file_bc="$main_path/bc_tmp.csv"
 
 # Parameters for principal component regressions
-signals_file="../output/signals_best125_1985.txt" # file with list of signals to use
+signals_file="$main_path/signals_best125_1985.txt" # file with list of signals to use
 n_pcs=75 # number of PCs in maximal regression
 n_years=10 # number of years for principal components/predictive regs
 quantile_prob=0.1 # quantile to form long/short portfolios (0.1 means deciles)
@@ -16,8 +17,8 @@ quantile_prob=0.1 # quantile to form long/short portfolios (0.1 means deciles)
 sample_start_yr=$(($start_yr-$n_years))
 
 # Paths
-params_path="../output/impute_ests/" 
-output_path="../output/pcr_returns/"
+params_path="$main_path/impute_ests/" 
+output_path="$main_path/pcr_returns/"
 
 # Submit the data prepping job
 out=$(Rscript --grid_submit=batch \
@@ -40,14 +41,14 @@ jobid=$( echo $out | grep -o -E '[0-9]+' )
 # These take up so much memory that I need to do one year at a time
 # But they each run relatively quickly
 iter=0
-for _yr in `seq $start_yr $end_yr`; do
+for _yr in ` $start_yr $end_yr `; do
 
     # Simple mean imputations
     Rscript --grid_submit=batch \
         --grid_hold=$jobid \
         --grid_ncpus=10 \
         --grid_mem=250G \
-        --grid_SGE_TASK_ID=1-12 \
+        --grid_SGE_TASK_ID=1-4 \
         --grid_email="jmccoy26@gsb.columbia.edu" \
         3b_pcr.R \
             --signals_keep=$signals_file \
@@ -64,7 +65,7 @@ for _yr in `seq $start_yr $end_yr`; do
         --grid_hold=$jobid \
         --grid_ncpus=10 \
         --grid_mem=250G \
-        --grid_SGE_TASK_ID=1-12 \
+        --grid_SGE_TASK_ID=1-4 \
         --grid_email="jmccoy26@gsb.columbia.edu" \
         3b_pcr.R \
             --signals_keep=$signals_file \

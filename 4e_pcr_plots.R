@@ -39,6 +39,16 @@ for (i in yrmons) {
   )
 }
 
+# NEW: single iteration of EM runs
+pcr_em_1iter <- list()
+for (i in yrmons) {
+  ym <- as.yearmon(paste0(substr(i, 1, 3), " ", substr(i, 4, 7)))
+  tryCatch(
+    {pcr_em_1iter[[i]] <- fread(paste0(data_dir, "pcr_em_1iter_", i, ".csv"))[, yyyymm := ym]},
+    error = function(e) print(paste0('error:', i))
+  )
+}
+
 pcr_mn <- list()
 for (i in yrmons) {
   ym <- as.yearmon(paste0(substr(i, 1, 3), " ", substr(i, 4, 7)))
@@ -51,11 +61,15 @@ for (i in yrmons) {
 pcr_all <- rbind(
     melt(rbindlist(pcr_em), 
         id.vars = c("pc", "n_signals", "yyyymm"), 
-        variable.name = "weighting", value.name = "ls_ret")[, type := "EM"],
+        variable.name = "weighting", value.name = "ls_ret")[, type := "EM Algo"],
+    melt(rbindlist(pcr_em_1iter), 
+        id.vars = c("pc", "n_signals", "yyyymm"), 
+        variable.name = "weighting", value.name = "ls_ret")[, type := "Available Case"],
     melt(rbindlist(pcr_mn), 
         id.vars = c("pc", "n_signals", "yyyymm"), 
-        variable.name = "weighting", value.name = "ls_ret")[, type := "Mean"]
+        variable.name = "weighting", value.name = "ls_ret")[, type := "Simple Mean"]
 )
+
 
 # Add in the cumulative returns
 pcr_all[
@@ -69,32 +83,27 @@ pcr_all[
 # Plots ----
 #===============================================================================#
 
-## Aggregate plots ----
+# Aggregate plots ----
 scale_gg = 0.55
 Npc_max = 80 
 
 # Combine all the data to get average returns and Sharpe ratio over time
 agg_data <- pcr_all[
-  pc <= Npc_max,
-  .( # Get as annualized mean return and std. dev.
-    ls_mn = mean(ls_ret, na.rm = T) * 12,
-    ls_sd = sd(ls_ret, na.rm = T) * sqrt(12)
-  ),
-  by = .(type, pc, weighting)
-] %>% 
-  mutate(
-    ls_sharpe = ls_mn / ls_sd
-    , weighting = dplyr::case_when(
+    pc <= Npc_max,
+    .( # Get as annualized mean return and std. dev.
+      ls_mn = mean(ls_ret, na.rm = T) * 12,
+      ls_sd = sd(ls_ret, na.rm = T) * sqrt(12)
+    ),
+    by = .(type, pc, weighting)
+][, ":="(
+    ls_sharpe = ls_mn / ls_sd,
+    weighting = dplyr::case_when(
         weighting == "vw_ls" ~ "Value",
         weighting == "ew_ls" ~ "Equal"
-    )
-    , type = dplyr::case_when(
-      type == 'Mean' ~ 'Simple Mean'
-      , type == 'EM' ~ 'EM Algo'
-    )
-  ) 
+    ), # Order type as would be good in legend
+    type = factor(type, levels = c('EM Algo', 'Simple Mean', 'Available Case'))
+)]
    
-
 # All the line plots will have same basic look
 plot_base <- ggplot(agg_data, aes(x = pc, colour = weighting, linetype = type)) + 
   theme_bw() + 
@@ -119,6 +128,7 @@ plot_base <- ggplot(agg_data, aes(x = pc, colour = weighting, linetype = type)) 
   ) +
   scale_color_manual(values = c(MATRED, MATBLUE))
 
+# Specific plots
 mn <- plot_base + geom_line(aes(y = ls_mn)) + 
   ylab("Annualized Mean Return (%)")
 sd <- plot_base + geom_line(aes(y = ls_sd)) +
@@ -144,7 +154,7 @@ ggsave(plot = sharpe,
 
 
 
-## Cumulative returns over time ----
+# Cumulative returns over time ----
 
 cumret_plot <- ggplot(
     pcr_all[pc %in% c(2, 10, 25, 37)],
