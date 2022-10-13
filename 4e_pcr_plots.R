@@ -45,7 +45,7 @@ for (i in yrmons) {
   ym <- as.yearmon(paste0(substr(i, 1, 3), " ", substr(i, 4, 7)))
   tryCatch(
     {pcr_em_1iter[[i]] <- fread(paste0(data_dir, "pcr_em_1iter_", i, ".csv"))[, yyyymm := ym]},
-    error = function(e) print(paste0('error:', i))
+    error = function(e) ""
   )
 }
 
@@ -126,6 +126,8 @@ plot_base <- ggplot(agg_data, aes(x = pc, colour = weighting, linetype = type)) 
   guides(
     colour = guide_legend(order = 1), linetype = guide_legend(order = 2)
   ) +
+  scale_linetype_manual(values = c('solid', 'longdash', 'dotted')) +
+  scale_size_manual(values = c(0.8, 0.8, 0.5)) +
   scale_color_manual(values = c(MATRED, MATBLUE))
 
 # Specific plots
