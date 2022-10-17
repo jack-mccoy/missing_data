@@ -4,10 +4,11 @@
 #===============================================================================#
 
 library(data.table)
+library(dplyr)
 library(ggplot2)
 library(gridExtra)
+library(RPostgres)
 library(zoo)
-library(dplyr)
 source('functions.R')
 
 #===============================================================================#
@@ -68,8 +69,9 @@ pcr_all <- rbind(
     melt(rbindlist(pcr_mn), 
         id.vars = c("pc", "n_signals", "yyyymm"), 
         variable.name = "weighting", value.name = "ls_ret")[, type := "Simple Mean"]
-)
-
+)[,
+    date := as.Date(yyyymm)
+]
 
 # Add in the cumulative returns
 pcr_all[
@@ -78,9 +80,120 @@ pcr_all[
   by = .(type, weighting, pc)
 ]
 
+# Fama-French factors ----
+
+wrds_con <- dbConnect(Postgres(),
+    user = 'jpm2223',
+    host = 'wrds-pgdata.wharton.upenn.edu',
+    port = 9737,
+    dbname = 'wrds')
+
+ff5_mom <- as.data.table(dbGetQuery(wrds_con, "
+    SELECT date, 
+        mktrf * 100 as mktrf, /* The PCR returns are in pct out of 100 */
+        smb * 100 as smb,
+        hml * 100 as hml,
+        rmw * 100 as rmw,
+        cma * 100 as cma,
+        umd * 100 as umd
+    FROM ff_all.fivefactors_monthly
+    ORDER BY date
+;"))
 
 #===============================================================================#
-# Plots ----
+# Regressions for alphas
+#===============================================================================#
+
+# Merge data to align PC returns with FF5 factors
+reg_data <- merge(pcr_all, ff5_mom, by = 'date')
+
+# Set the sequence of PCs to iterate through
+pcs <- seq(min(pcr_all$pc), max(pcr_all$pc))
+
+# FF5 + Mom regresions ----
+
+# Alphas from EM-based strategy
+alphas_em_ff5 <- melt(
+    rbindlist(lapply(pcs, function(x) {
+        dat = reg_data[pc == x & type == 'EM Algo']
+        alpha_ew <- lm('ls_ret ~ mktrf + smb + hml + rmw + cma + umd',
+            dat[weighting == 'ew_ls'])$coefficients['(Intercept)']
+        alpha_vw <- lm('ls_ret ~ mktrf + smb + hml + rmw + cma + umd', 
+            dat[weighting == 'vw_ls'])$coefficients['(Intercept)']
+        return(data.table(pc = x, Equal = alpha_ew, Value = alpha_vw))
+    })),
+    id = 'pc', value.name = 'alpha_ff5', variable.name = 'weighting'
+)[, ":="(type = 'EM Algo')]
+
+# Alphas from mean-based strategy
+alphas_mn_ff5 <- melt(
+    rbindlist(lapply(pcs, function(x) {
+        dat = reg_data[pc == x & type == 'Simple Mean']
+        alpha_ew <- lm('ls_ret ~ mktrf + smb + hml + rmw + cma + umd',
+            dat[weighting == 'ew_ls'])$coefficients['(Intercept)']
+        alpha_vw <- lm('ls_ret ~ mktrf + smb + hml + rmw + cma + umd', 
+            dat[weighting == 'vw_ls'])$coefficients['(Intercept)']
+        return(data.table(pc = x, Equal = alpha_ew, Value = alpha_vw))
+    })), 
+    id = 'pc', value.name = 'alpha_ff5', variable.name = 'weighting'
+)[, ":="(type = 'Simple Mean')]
+
+# Alphas from available case strategy
+alphas_avail_ff5 <- melt(
+    rbindlist(lapply(pcs, function(x) {
+        dat = reg_data[pc == x & type == 'Available Case']
+        alpha_ew <- lm('ls_ret ~ mktrf + smb + hml + rmw + cma + umd',
+            dat[weighting == 'ew_ls'])$coefficients['(Intercept)']
+        alpha_vw <- lm('ls_ret ~ mktrf + smb + hml + rmw + cma + umd', 
+            dat[weighting == 'vw_ls'])$coefficients['(Intercept)']
+        return(data.table(pc = x, Equal = alpha_ew, Value = alpha_vw))
+    })),
+    id = 'pc', value.name = 'alpha_ff5', variable.name = 'weighting'
+)[, ":="(type = 'Available Case')]
+
+# CAPM regressions ----
+
+# Alphas from EM-based strategy
+alphas_em_capm <- melt(
+    rbindlist(lapply(pcs, function(x) {
+        dat = reg_data[pc == x & type == 'EM Algo']
+        alpha_ew <- lm('ls_ret ~ mktrf',
+            dat[weighting == 'ew_ls'])$coefficients['(Intercept)']
+        alpha_vw <- lm('ls_ret ~ mktrf', 
+            dat[weighting == 'vw_ls'])$coefficients['(Intercept)']
+        return(data.table(pc = x, Equal = alpha_ew, Value = alpha_vw))
+    })), 
+    id = 'pc', value.name = 'alpha_capm', variable.name = 'weighting'
+)[, ":="(type = 'EM Algo')]
+
+# Alphas from mean-based strategy
+alphas_mn_capm <- melt(
+    rbindlist(lapply(pcs, function(x) {
+        dat = reg_data[pc == x & type == 'Simple Mean']
+        alpha_ew <- lm('ls_ret ~ mktrf',
+            dat[weighting == 'ew_ls'])$coefficients['(Intercept)']
+        alpha_vw <- lm('ls_ret ~ mktrf', 
+            dat[weighting == 'vw_ls'])$coefficients['(Intercept)']
+        return(data.table(pc = x, Equal = alpha_ew, Value = alpha_vw))
+    })), 
+    id = 'pc', value.name = 'alpha_capm', variable.name = 'weighting'
+)[, ":="(type = 'Simple Mean')]
+
+# Alphas from available case strategy
+alphas_avail_capm <- melt(
+    rbindlist(lapply(pcs, function(x) {
+        dat = reg_data[pc == x & type == 'Available Case']
+        alpha_ew <- lm('ls_ret ~ mktrf',
+            dat[weighting == 'ew_ls'])$coefficients['(Intercept)']
+        alpha_vw <- lm('ls_ret ~ mktrf', 
+            dat[weighting == 'vw_ls'])$coefficients['(Intercept)']
+        return(data.table(pc = x, Equal = alpha_ew, Value = alpha_vw))
+    })), 
+    id = 'pc', value.name = 'alpha_capm', variable.name = 'weighting'
+)[, ":="(type = 'Available Case')]
+
+#===============================================================================#
+# Plots
 #===============================================================================#
 
 # Aggregate plots ----
@@ -100,10 +213,19 @@ agg_data <- pcr_all[
     weighting = dplyr::case_when(
         weighting == "vw_ls" ~ "Value",
         weighting == "ew_ls" ~ "Equal"
-    ), # Order type as would be good in legend
+    )
+)][ # Add in alphas
+    rbind(alphas_mn_capm, alphas_em_capm, alphas_avail_capm),
+    on = c('type', 'pc', 'weighting')
+][
+    rbind(alphas_mn_ff5, alphas_em_ff5, alphas_avail_ff5),
+    on = c('type', 'pc', 'weighting')
+][, ":="( # annualize alphas and order type as would be good in legend
+    alpha_capm = alpha_capm * 12,
+    alpha_ff5 = alpha_ff5 * 12,
     type = factor(type, levels = c('EM Algo', 'Simple Mean', 'Available Case'))
 )]
-   
+
 # All the line plots will have same basic look
 plot_base <- ggplot(agg_data, aes(x = pc, colour = weighting, linetype = type)) + 
   theme_bw() + 
@@ -132,11 +254,15 @@ plot_base <- ggplot(agg_data, aes(x = pc, colour = weighting, linetype = type)) 
 
 # Specific plots
 mn <- plot_base + geom_line(aes(y = ls_mn)) + 
-  ylab("Annualized Mean Return (%)")
+    ylab("Annualized Mean Return (%)")
 sd <- plot_base + geom_line(aes(y = ls_sd)) +
-  ylab("Annualized Std. Dev. (%)") 
+    ylab("Annualized Std. Dev. (%)") 
 sharpe <- plot_base + geom_line(aes(y = ls_sharpe)) + 
-  ylab("Annualized Sharpe Ratio") 
+    ylab("Annualized Sharpe Ratio") 
+alpha_capm <- plot_base + geom_line(aes(y = alpha_capm)) +
+    ylab('Annualized CAPM Alpha (%)')
+alpha_ff5 <- plot_base + geom_line(aes(y = alpha_ff5)) +
+    ylab('Annualized FF5 + Mom Alpha (%)')
 
 out_grid <- marrangeGrob(
   grobs = list(mn, sd, sharpe),
@@ -145,16 +271,21 @@ out_grid <- marrangeGrob(
   vp = grid::viewport(width = unit(5.5, "in"), height = unit(10, "in"))
 )
 
-
-ggsave(plot = mn, 
-       filename = paste0(out_path, "plots/pcr_expected_rets.pdf"),
-       width = 8, height = 5, unit = "in", scale = scale_gg)
+ggsave(plot = mn,
+    filename = paste0(out_path, "plots/pcr_expected_rets.pdf"),
+    width = 8, height = 5, unit = "in", scale = scale_gg)
 
 ggsave(plot = sharpe, 
-       filename = paste0(out_path, "plots/pcr_sharpes.pdf"),
-       width = 8, height = 5, unit = "in", scale = scale_gg)
+    filename = paste0(out_path, "plots/pcr_sharpes.pdf"),
+    width = 8, height = 5, unit = "in", scale = scale_gg)
 
+ggsave(plot = alpha_capm,
+    filename = paste0(out_path, "plots/pcr_alpha_capm.pdf"),
+    width = 8, height = 5, unit = "in", scale = scale_gg)
 
+ggsave(plot = alpha_ff5, 
+    filename = paste0(out_path, "plots/pcr_alpha_ff5_mom.pdf"),
+    width = 8, height = 5, unit = "in", scale = scale_gg)
 
 # Cumulative returns over time ----
 
