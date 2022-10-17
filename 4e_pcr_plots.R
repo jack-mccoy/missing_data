@@ -83,7 +83,6 @@ pcr_all[
 # Fama-French factors ----
 
 wrds_con <- dbConnect(Postgres(),
-    user = 'jpm2223',
     host = 'wrds-pgdata.wharton.upenn.edu',
     port = 9737,
     dbname = 'wrds')
