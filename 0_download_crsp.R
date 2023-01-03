@@ -1,6 +1,6 @@
 # (also downloads Chen-Zimmermann signals)
 #==============================================================================#
-# Packages ====
+# Packages and Setup ====
 #==============================================================================#
 
 library(data.table)
@@ -9,6 +9,11 @@ library(RPostgres)
 library(zoo)
 library(googledrive)
 library(tidyverse)
+
+dir.create('../data/', showWarnings = F)
+dir.create('../output/', showWarnings = F)
+dir.create('../output/plots/', showWarnings = F)
+dir.create('../output/impute_ests/', showWarnings = F)
 
 #==============================================================================#
 # Download CRSP ====

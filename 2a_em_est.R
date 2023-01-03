@@ -1,6 +1,6 @@
 
 #==============================================================================#
-# Packages
+# Packages ----
 #==============================================================================#
 
 library(car) # Box-Cox stuff
@@ -10,19 +10,23 @@ library(RPostgres) # SQL query to WRDS
 library(zoo) # yearmon convention is nice to work with here
 
 #==============================================================================#
-# Option parsing
+# Option parsing ----
 #==============================================================================#
+
+# check if on cluster
+on_cluster = Sys.getenv('SGE_TASK_ID') != ""
 
 option_list <- list(
     optparse::make_option(c("--impute_yr"),
-        type = "numeric", default = as.integer(Sys.getenv("SGE_TASK_ID")),
+        type = "numeric", 
+        default = ifelse(on_cluster, as.integer(Sys.getenv("SGE_TASK_ID")), 1990),
         help = "year of data to impute"),
     optparse::make_option(c("--boxcox"),
         type = "logical", default = FALSE, action = "store_true",
         help = "logical to indicate if Box-Cox transformations should be done before imputing"),
     optparse::make_option(c("--out_path"),
         type = "character", 
-        default = "./",
+        default = "../output/impute_ests/",
         help = "directory to store output to"),
     optparse::make_option(c("--impute_vec"),
         type = "character", default = "bm,mom6m",
@@ -52,20 +56,21 @@ if (grepl("\\.txt", opt$impute_vec)) {
 }
 
 #==============================================================================#
-# Hardcodes
+# Hardcodes ----
 #==============================================================================#
 
 # Months to impute
 yrmons <- zoo::as.yearmon(paste0(month.abb, " ", opt$impute_yr))
 
+
 #==============================================================================#
-# Functions
+# Functions ----
 #==============================================================================#
 
 source("functions.R")
 
 #==============================================================================#
-# Read in data
+# Read in data ----
 #==============================================================================#
 
 # Read in the signals we want 
@@ -82,7 +87,7 @@ crsp_data <- fread("../data/crsp_data.csv")
 crsp_data[, yyyymm := as.yearmon(yyyymm)]
 
 #==============================================================================#
-# Ensure we have all good variables
+# Ensure we have all good variables ----
 #==============================================================================#
 
 signals <- merge(signals, crsp_data, by = c("permno", "yyyymm"))
@@ -111,8 +116,10 @@ rm(crsp_data)
 cat("There are a total of", length(signals_good), "signals with enough data.\n")
 print(signals_good)
 
+print(head(signals))
+
 #==============================================================================#
-# Box-Cox transformations and scaling
+# Box-Cox transformations and scaling ----
 #==============================================================================#
 
 # Get vector of time periods to run through 
@@ -124,8 +131,14 @@ yrmons <- yrmons[order(yrmons)]
 
 start_b <- Sys.time()
 
-doParallel::registerDoParallel(cores = parallel::detectCores())
-bctrans <- foreach::"%dopar%"(foreach::foreach(i = yrmons), {
+# need to pass in data.table package?
+
+# doParallel::registerDoParallel(cores = parallel::detectCores())
+doParallel::registerDoParallel(cores = 4) # debug
+
+bctrans <- foreach::"%dopar%"(foreach::foreach(
+  i = yrmons, .packages = c('data.table')
+  ), {
 
     cat("Box-Cox transformations for", as.character(i), "\n")
 
@@ -203,7 +216,7 @@ cat("Box-Cox run time:", bc_time, "minutes\n")
 rm(signals)
 
 #==============================================================================#
-# Imputations
+# Imputations ----
 #==============================================================================#
 
 # Timing for the log
@@ -211,8 +224,10 @@ start_i <- Sys.time()
 
 # Getting started on the imputations in parallel ====
 
-doParallel::registerDoParallel(cores = 28)
-imp_par <- foreach::"%dopar%"(foreach::foreach(i = as.character(yrmons)), {
+# debug: i = as.character(yrmons[1])
+
+# doParallel::registerDoParallel(cores = 28) # ac: why register again?
+imp_par <- foreach::"%do%"(foreach::foreach(i = as.character(yrmons)), {
 
     cat("Starting imputations for", i, "\n")
 
