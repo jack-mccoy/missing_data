@@ -1,6 +1,6 @@
 
 #==============================================================================#
-# Packages
+# Packages ----
 #==============================================================================#
 
 library(doParallel)
@@ -9,27 +9,31 @@ library(foreach)
 library(zoo)
 
 #==============================================================================#
-# Option parsing
+# Option parsing ----
 #==============================================================================#
+
+# check if on cluster
+on_cluster = Sys.getenv('SGE_TASK_ID') != ""
 
 option_list <- list(
   optparse::make_option(c("--out_path"),
-    type = "character", default = "./",
+    type = "character", default = "../output/pcr_returns/",
     help = "directory to store output to"),
   optparse::make_option(c("--signals_keep"),
-    type = "character", default = "size,bm",
+    type = "character", default = "../output/signals.txt",
     help = "a comma-separated list of values or .txt file to scan"),
   optparse::make_option(c("--data_file"),
-    type = "character", default = "mn_imputed_tmp.csv",
+    type = "character", default = "../output/imp_tmp.csv",
     help = "path of imputed file"),
   optparse::make_option(c("--iter_year"),
     type = "numeric", default = 1990,
     help = "year for making prediction (numeric)"),
   optparse::make_option(c("--iter_month"),
-    type = "numeric", default = as.integer(Sys.getenv("SGE_TASK_ID")),
+    type = "numeric", 
+    default = ifelse(on_cluster, as.integer(Sys.getenv("SGE_TASK_ID")), 5),
     help = "month for making prediction (numeric)"),
   optparse::make_option(c("--prefix"),
-    type = "character", default = "pcr_",
+    type = "character", default = "pcr_em_",
     help = "prefix of output files"),
   optparse::make_option(c("--n_yrs"),
     type = "numeric", default = 7,
@@ -61,14 +65,17 @@ if (substr(opt$out_path, nchar(opt$out_path), nchar(opt$out_path)) != "/") {
   opt$out_path <- paste0(opt$out_path, "/")
 }
 
+# make dir 
+dir.create(opt$out_path, showWarnings = F)
+
 #==============================================================================#
-# Functions
+# Functions ----
 #==============================================================================#
 
 source("functions.R")
 
 #==============================================================================#
-# Get prediction month from array iteration map
+# Get prediction month from array iteration map ----
 #==============================================================================#
 
 pred_mon <- as.yearmon(opt$iter_year + opt$iter_month/12 - 1/12)
@@ -77,7 +84,7 @@ pred_mon <- as.yearmon(opt$iter_year + opt$iter_month/12 - 1/12)
 cat("PC regressions for ", as.character(pred_mon), "\n")
 
 #==============================================================================#
-# Data pull
+# Data pull ----
 #==============================================================================#
 
 # Read in data and merge
@@ -113,7 +120,7 @@ signals <- signals[complete.cases(
 )]
 
 #==============================================================================# 
-# Timing adjustments
+# Timing adjustments ----
 #==============================================================================#
 
 # Align signals with next month's returns
@@ -128,7 +135,7 @@ signals[, time_avail_m := yyyymm + 1/12]
 
 
 #==============================================================================# 
-# Run regressions
+# Run regressions ----
 #==============================================================================#
 
 # Get principal components and form regression data
@@ -142,8 +149,11 @@ n_pcs <- min(opt$n_pcs, ncol(pc$x), na.rm = T)
 rm(signals, pc) # Memory
 
 # Regressions in parallel to speed things up
-doParallel::registerDoParallel(cores = parallel::detectCores())
-pcr_pred <- foreach::"%dopar%"(foreach::foreach(j = 1:n_pcs), {
+# doParallel::registerDoParallel(cores = parallel::detectCores())
+doParallel::registerDoParallel(cores = 10) # debug
+pcr_pred <- foreach::"%dopar%"(foreach::foreach(
+  j = 1:n_pcs, .packages = c('data.table','zoo')
+), {
 
   # Need EW and VW regressions as separate models
   mod_ew <- lm(paste0("bh1m ~ ", paste(paste0("PC", 1:j), collapse = "+")), 
@@ -187,7 +197,7 @@ pcr_pred <- foreach::"%dopar%"(foreach::foreach(j = 1:n_pcs), {
 })
 
 #==============================================================================# 
-# Output
+# Output ----
 #==============================================================================#
 
 fwrite(rbindlist(pcr_pred)[, n_signals := length(opt$signals_keep)], 

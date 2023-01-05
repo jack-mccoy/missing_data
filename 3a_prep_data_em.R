@@ -25,11 +25,11 @@ option_list <- list(
         help = "year that sample ends"),
     optparse::make_option(c("--tmp_file_imp"),
         type = "character", 
-        default = "imputed_tmp.csv",
+        default = "../output/imp_tmp.csv",
         help = "name of temporary output file for imputed dataset"),
     optparse::make_option(c("--tmp_file_bc"),
         type = "character", 
-        default = "bc_tmp.csv",
+        default = "../output/bc_tmp.csv",
         help = "name of temporary output file for imputed dataset"),
     optparse::make_option(c("--params_path"),
         type = "character", 
@@ -95,7 +95,7 @@ yrmons <- seq(
 # doParallel::registerDoParallel(cores = parallel::detectCores()) 
 doParallel::registerDoParallel(cores = 10) # debug
 imputed <- foreach::"%dopar%"(foreach::foreach(
-  i = yrmons,  .packages = c('data.table')
+  i = yrmons,  .packages = c('data.table','zoo')
   ), {
 
   i_file <- gsub("[[:space:]]", "", i)
