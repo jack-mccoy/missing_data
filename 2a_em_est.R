@@ -56,18 +56,16 @@ if (grepl("\\.txt", opt$impute_vec)) {
 }
 
 #==============================================================================#
-# Hardcodes ----
+# Setup ----
 #==============================================================================#
 
 # Months to impute
 yrmons <- zoo::as.yearmon(paste0(month.abb, " ", opt$impute_yr))
 
-
-#==============================================================================#
-# Functions ----
-#==============================================================================#
-
 source("functions.R")
+
+# make output folder
+dir.create(opt$out_path, showWarnings = F)
 
 #==============================================================================#
 # Read in data ----
@@ -134,7 +132,7 @@ start_b <- Sys.time()
 # need to pass in data.table package?
 
 # doParallel::registerDoParallel(cores = parallel::detectCores())
-doParallel::registerDoParallel(cores = 4) # debug
+doParallel::registerDoParallel(cores = 12) # debug
 
 bctrans <- foreach::"%dopar%"(foreach::foreach(
   i = yrmons, .packages = c('data.table')

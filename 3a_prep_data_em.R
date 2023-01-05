@@ -1,6 +1,6 @@
 
 #==============================================================================#
-# Packages
+# Packages ----
 #==============================================================================#
 
 library(car)
@@ -10,12 +10,12 @@ library(foreach)
 library(zoo)
 
 #==============================================================================#
-# Option parsing
+# Option parsing ----
 #==============================================================================#
 
 option_list <- list(
     optparse::make_option(c("--impute_vec"),
-        type = "character", default = "signals.txt",
+        type = "character", default = "../output/signals.txt",
         help = "a comma-separated list of values or .txt file to scan"),
     optparse::make_option(c("--sample_start_year"),
         type = "numeric", default = 1985,
@@ -33,7 +33,7 @@ option_list <- list(
         help = "name of temporary output file for imputed dataset"),
     optparse::make_option(c("--params_path"),
         type = "character", 
-        default = "./",
+        default = "../output/impute_ests",
         help = "directory holding parameter estimates")
 )
 
@@ -56,13 +56,13 @@ if (substr(opt$params_path, nchar(opt$params_path), nchar(opt$params_path)) != "
 }
 
 #==============================================================================#
-# Functions
+# Functions ----
 #==============================================================================#
 
 source("functions.R")
 
 #==============================================================================#
-# Data pull
+# Data pull ----
 #==============================================================================#
 
 # Read in the signals 
@@ -82,7 +82,7 @@ signals <- merge(signals, crsp_data, by = c("permno", "yyyymm"))[,
 ]
 
 #==============================================================================#
-# Imputation
+# Imputation ----
 #==============================================================================#
 
 # Sequence of yearmons to impute
@@ -92,12 +92,15 @@ yrmons <- seq(
     by = 1/12
 )
 
-doParallel::registerDoParallel(cores = parallel::detectCores())
-imputed <- foreach::"%dopar%"(foreach::foreach(i = yrmons), {
+# doParallel::registerDoParallel(cores = parallel::detectCores()) 
+doParallel::registerDoParallel(cores = 10) # debug
+imputed <- foreach::"%dopar%"(foreach::foreach(
+  i = yrmons,  .packages = c('data.table')
+  ), {
 
   i_file <- gsub("[[:space:]]", "", i)
 
-  # Get the Box-Cox and scaling parameters ----
+  ## Get the Box-Cox and scaling parameters ----
 
   params <- fread(paste0(opt$params_path, "bcn_scale_", i_file, ".csv"))
 
@@ -185,7 +188,7 @@ imputed <- foreach::"%dopar%"(foreach::foreach(i = yrmons), {
 })
 
 #==============================================================================#
-# Output
+# Output ----
 #==============================================================================#
 
 fwrite(rbindlist(lapply(imputed, function(x) return(x$imp)), fill = T), 

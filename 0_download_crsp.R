@@ -12,8 +12,7 @@ library(tidyverse)
 
 dir.create('../data/', showWarnings = F)
 dir.create('../output/', showWarnings = F)
-dir.create('../output/plots/', showWarnings = F)
-dir.create('../output/impute_ests/', showWarnings = F)
+
 
 #==============================================================================#
 # Download CRSP ====
