@@ -129,13 +129,11 @@ yrmons <- yrmons[order(yrmons)]
 
 start_b <- Sys.time()
 
-# need to pass in data.table package?
-
 # doParallel::registerDoParallel(cores = parallel::detectCores())
 doParallel::registerDoParallel(cores = 12) # debug
 
 bctrans <- foreach::"%dopar%"(foreach::foreach(
-  i = yrmons, .packages = c('data.table')
+  i = yrmons, .packages = c('data.table','zoo')
   ), {
 
     cat("Box-Cox transformations for", as.character(i), "\n")
@@ -222,9 +220,6 @@ start_i <- Sys.time()
 
 # Getting started on the imputations in parallel ====
 
-# debug: i = as.character(yrmons[1])
-
-# doParallel::registerDoParallel(cores = 28) # ac: why register again?
 imp_par <- foreach::"%do%"(foreach::foreach(i = as.character(yrmons)), {
 
     cat("Starting imputations for", i, "\n")
