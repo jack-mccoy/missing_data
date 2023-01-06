@@ -100,12 +100,6 @@ yrmons <- seq(
 
 # set up parallel comp
 ncores = floor(parallel::detectCores()*opt$cores_frac)
-
-# debug
-yrmons = yrmons[1:12]
-ncores = 10
-opt$impute_type = 'availcase'
-
 doParallel::registerDoParallel(cores = ncores)
 
 signals_new_list <- foreach::"%dopar%"(foreach::foreach(
@@ -120,7 +114,7 @@ signals_new_list <- foreach::"%dopar%"(foreach::foreach(
     min_obs = 2
   ))
   
-  tmp <- signals[yyyymm == i, .SD, .SDcols = c("permno", "yyyymm", good)]
+  signals_tmp <- signals[yyyymm == i, .SD, .SDcols = c("permno", "yyyymm", good)]
 
   ## Box-Cox transform ----
   
@@ -128,7 +122,7 @@ signals_new_list <- foreach::"%dopar%"(foreach::foreach(
   params <- fread(paste0(opt$params_path, "bcn_scale_", i_file, ".csv"))
 
   # Perform the Box-Cox transformation and scaling 
-  tmp[,
+  signals_tmp[,
     (good) := foreach::"%do%"(foreach::foreach(j = good), {
 
       lambda_j <- params[variable == j & param == "bcn:lambda", value]
@@ -137,7 +131,7 @@ signals_new_list <- foreach::"%dopar%"(foreach::foreach(
       scale_j <- params[variable == j & param == "scaled:scale", value]
 
       # Winsorize 
-      x <- winsorize(tmp[, get(j)], tail = 0.005)
+      x <- winsorize(signals_tmp[, get(j)], tail = 0.005)
       
       # BC-transform if possible
       if (!is.na(lambda_j) & !is.na(gamma_j)) {
@@ -155,7 +149,7 @@ signals_new_list <- foreach::"%dopar%"(foreach::foreach(
   if (opt$impute_type %in% c('em', 'availcase')){
     
     # Deal with negative eigenvalues here 
-    R0 <- cov(tmp[, .SD, .SDcols = good], use = "pairwise.complete.obs")
+    R0 <- cov(signals_tmp[, .SD, .SDcols = good], use = "pairwise.complete.obs")
     id <- diag(nrow = nrow(R0), ncol = ncol(R0))
     
     # Error checking. Catch missing means and covariance
@@ -174,9 +168,9 @@ signals_new_list <- foreach::"%dopar%"(foreach::foreach(
         if (k == 100) break
       }
       # ac: not sure we want to do this
-      tmp[, # Now make it so that data has same variance as new cov mat
+      signals_tmp[, # Now make it so that data has same variance as new cov mat
           (good) := foreach::"%do%"(foreach::foreach(j = good), {
-            tmp[, get(j)] * R0[j, j]
+            signals_tmp[, get(j)] * R0[j, j]
           })
       ]
     }       
@@ -195,30 +189,30 @@ signals_new_list <- foreach::"%dopar%"(foreach::foreach(
     } else if (opt$impute_type == 'availcase'){
       # availcase settings
       # this is just: impute using sample moments (1 iteration)
-      tmpmat = tmp[ , ..good]
+      tmpmat = signals_tmp[ , ..good]
       estE = colMeans(tmpmat, na.rm=T)
       estR = cov(tmpmat, use = 'pairwise.complete.obs')
       maxiter = 1
     }
     
     # Impute the data from estimated parameters ----
-    imp_i <- mvn_emf(as.matrix(tmp[, .SD, .SDcols = good]), 
+    imp_i <- mvn_emf(as.matrix(signals_tmp[, .SD, .SDcols = good]), 
                      E0 = estE[good], R0 = estR[good, good], 
                      tol = 1e-4, maxiter = maxiter, update_estE = FALSE)$Ey # Most of these should be converging quickly  
     
     colnames(imp_i) <- good # set the correct names
     
-    imp_i <- data.table(imp_i, permno = tmp$permno, yyyymm = tmp$yyyymm)
+    imp_i <- data.table(imp_i, permno = signals_tmp$permno, yyyymm = signals_tmp$yyyymm)
     
-    # overwrite tmp
-    tmp = imp_i
+    # overwrite signals_tmp
+    signals_tmp = imp_i
     
   } # end impute if desired
 
   cat("signals_new for", as.character(i), "\n")
 
   # Return the imputed and un-transformed data
-  return(tmp)
+  return(signals_tmp)
 
 })
 

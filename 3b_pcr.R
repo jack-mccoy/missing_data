@@ -154,7 +154,7 @@ rm(signals, pc) # Memory
 # Regressions in parallel to speed things up
 
 ncores = floor(parallel::detectCores()*opt$cores_frac)
-doParallel::registerDoParallel(cores = parallel::detectCores())
+doParallel::registerDoParallel(cores = ncores)
 
 pcr_pred <- foreach::"%dopar%"(foreach::foreach(
   j = 1:n_pcs, .packages = c('data.table','zoo')

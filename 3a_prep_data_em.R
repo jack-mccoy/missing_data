@@ -96,7 +96,7 @@ yrmons <- seq(
 )
 
 ncores = floor(parallel::detectCores()*opt$cores_frac)
-doParallel::registerDoParallel(cores = parallel::detectCores())
+doParallel::registerDoParallel(cores = ncores)
 
 imputed <- foreach::"%dopar%"(foreach::foreach(
   i = yrmons,  .packages = c('data.table','zoo')
