@@ -233,9 +233,10 @@ plot_base <- ggplot(agg_data, aes(x = pc, colour = weighting, linetype = type)) 
     legend.background = element_blank(),
     legend.key = element_blank(),
     legend.spacing.y = unit(0.01, 'cm'),
-    legend.spacing.x = unit(0.2, 'cm'),
+    legend.spacing.x = unit(0.1, 'cm'),
     legend.box = 'horizontal',
-    legend.key.size = unit(0.4, 'cm'),
+    legend.key.height = unit(0.4, 'cm'),
+    legend.key.width = unit(0.6, 'cm'),
     legend.text = element_text(size = 8),
     legend.title = element_text(size = 9)
   ) + 
@@ -253,15 +254,18 @@ plot_base <- ggplot(agg_data, aes(x = pc, colour = weighting, linetype = type)) 
 
 # Specific plots
 mn <- plot_base + geom_line(aes(y = ls_mn)) + 
-    ylab("Annualized Mean Return (%)")
+    ylab("Annualized Mean Return (%)") +
+    ylim(0, 45)
 sd <- plot_base + geom_line(aes(y = ls_sd)) +
     ylab("Annualized Std. Dev. (%)") 
 sharpe <- plot_base + geom_line(aes(y = ls_sharpe)) + 
     ylab("Annualized Sharpe Ratio") 
 alpha_capm <- plot_base + geom_line(aes(y = alpha_capm)) +
-    ylab('Annualized CAPM Alpha (%)')
+    ylab('Annualized CAPM Alpha (%)') +
+    ylim(0, 45)
 alpha_ff5 <- plot_base + geom_line(aes(y = alpha_ff5)) +
-    ylab('Annualized FF5 + Mom Alpha (%)')
+    ylab('Annualized FF5 + Mom Alpha (%)') +
+    ylim(0, 45)
 
 out_grid <- marrangeGrob(
   grobs = list(mn, sd, sharpe),
