@@ -39,7 +39,10 @@ option_list <- list(
         help = "a numeric value for the convergence check"),
     optparse::make_option(c("--force_convergence", "-f"),
         type = "logical", default = FALSE, action = "store_true",
-        help = "logical to override maxiter and run the EM procedure until it converges to tol")
+        help = "logical to override maxiter and run the EM procedure until it converges to tol"),
+    optparse::make_option(c("--cores_frac"),
+        type = "numeric", default = 1.0,
+        help = "fraction of total cores to use")    
 )
 
 opt_parser <- optparse::OptionParser(option_list = option_list)
@@ -129,8 +132,8 @@ yrmons <- yrmons[order(yrmons)]
 
 start_b <- Sys.time()
 
-# doParallel::registerDoParallel(cores = parallel::detectCores())
-doParallel::registerDoParallel(cores = 12) # debug
+ncores = floor(parallel::detectCores()*opt$cores_frac)
+doParallel::registerDoParallel(cores = parallel::detectCores())
 
 bctrans <- foreach::"%dopar%"(foreach::foreach(
   i = yrmons, .packages = c('data.table','zoo')

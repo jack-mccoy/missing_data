@@ -44,7 +44,10 @@ option_list <- list(
         "(i.e., 0.2 means quintile portfolios)")),
   optparse::make_option(c("--n_pcs"),
     type = "numeric", default = 25,
-    help = "maximum number of principal components to use in PCRs")
+    help = "maximum number of principal components to use in PCRs"),
+  optparse::make_option(c("--cores_frac"),
+    type = "numeric", default = 1.0,
+    help = "fraction of total cores to use")      
 )
 
 opt_parser <- optparse::OptionParser(option_list = option_list)
@@ -149,8 +152,10 @@ n_pcs <- min(opt$n_pcs, ncol(pc$x), na.rm = T)
 rm(signals, pc) # Memory
 
 # Regressions in parallel to speed things up
-# doParallel::registerDoParallel(cores = parallel::detectCores())
-doParallel::registerDoParallel(cores = 10) # debug
+
+ncores = floor(parallel::detectCores()*opt$cores_frac)
+doParallel::registerDoParallel(cores = parallel::detectCores())
+
 pcr_pred <- foreach::"%dopar%"(foreach::foreach(
   j = 1:n_pcs, .packages = c('data.table','zoo')
 ), {

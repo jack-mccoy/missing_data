@@ -13,6 +13,7 @@ source("functions.R")
 plot_path <- "../output/plots/"
 dates <- as.yearmon(c("Jun 1985","Jun 1990", "Jun 2000", "Jun 2010"))
 
+dir.create(plot_path, showWarnings = F)
 
 #===============================================================================#
 # Read in the data ----

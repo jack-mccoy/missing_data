@@ -34,7 +34,10 @@ option_list <- list(
     optparse::make_option(c("--params_path"),
         type = "character", 
         default = "../output/impute_ests",
-        help = "directory holding parameter estimates")
+        help = "directory holding parameter estimates"),
+    optparse::make_option(c("--cores_frac"),
+        type = "numeric", default = 1.0,
+        help = "fraction of total cores to use")        
 )
 
 opt_parser <- optparse::OptionParser(option_list = option_list)
@@ -92,8 +95,9 @@ yrmons <- seq(
     by = 1/12
 )
 
-# doParallel::registerDoParallel(cores = parallel::detectCores()) 
-doParallel::registerDoParallel(cores = 10) # debug
+ncores = floor(parallel::detectCores()*opt$cores_frac)
+doParallel::registerDoParallel(cores = parallel::detectCores())
+
 imputed <- foreach::"%dopar%"(foreach::foreach(
   i = yrmons,  .packages = c('data.table','zoo')
   ), {
@@ -171,10 +175,10 @@ imputed <- foreach::"%dopar%"(foreach::foreach(
   } 
 
   # Impute the data from estimated parameters ----
-
+  # maxiter = 1 should work, but for safety 10 is better due to rounding issues
   imp_i <- mvn_emf(as.matrix(tmp[, .SD, .SDcols = good]), 
     E0 = estE[good], R0 = estR[good, good], 
-    tol = 1e-4, maxiter = 1, update_estE = FALSE)$Ey # Most of these should be converging quickly  
+    tol = 1e-4, maxiter = 10, update_estE = FALSE)$Ey # Most of these should be converging quickly  
 
   colnames(imp_i) <- good # set the correct names
 

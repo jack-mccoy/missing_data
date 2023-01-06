@@ -45,7 +45,8 @@ shell(runme)
 
 for (yr in start_yr:end_yr){
   
-  print(paste0('running PCR for year ', yr))
+  print(paste0('==== Starting PCR for year ', yr))
+  tic = Sys.time()
   
   for (mon in 1:12){
     
@@ -81,5 +82,12 @@ for (yr in start_yr:end_yr){
     
     shell(runme)
   }
+  
+  toc = Sys.time()
+  
+  print(paste0('==== Finished PCR for year ', yr))
+  print(paste0('====  minutes required: ', round(as.numeric(toc-tic, units = 'mins'))))
+  
 }
+
 

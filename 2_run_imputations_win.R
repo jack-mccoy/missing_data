@@ -11,6 +11,7 @@ for (year_cur in 1985:2020){
     , ' --out_path=../output/impute_ests/'
     , ' --tol=1e-4'
     , ' --boxcox'
+    , ' --cores_frac=0.5'
   )
   
   shell(runme)
