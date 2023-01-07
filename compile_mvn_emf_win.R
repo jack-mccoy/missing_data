@@ -10,7 +10,7 @@ writeLines(
 )
 
 # run compile command
-system('R CMD SHLIB mvn_emf.f90 -o mvn_emf.so')
+system('R CMD SHLIB mvn_emf.f90 -o mvn_emf_win.so')
 
 # clean up
 file.remove('makevars')

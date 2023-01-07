@@ -19,7 +19,11 @@ mvn_emf <- function(y, E0, R0, update_estE = TRUE,
     tol = 1e-6, maxiter = 1e3) {
   
   if (!is.loaded('mvn_emf')) {
-    dyn.load("mvn_emf.so")
+    if(.Platform$OS.type == "unix") {
+      dyn.load("mvn_emf.so")
+    } else {
+      dyn.load("mvn_emf_win.so")
+    }
   }
   
   N <- nrow(y)

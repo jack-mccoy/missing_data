@@ -70,6 +70,8 @@ source("functions.R")
 # make output folder
 dir.create(opt$out_path, showWarnings = F)
 
+closeAllConnections()
+
 #==============================================================================#
 # Read in data ----
 #==============================================================================#
@@ -179,7 +181,7 @@ bctrans <- foreach::"%dopar%"(foreach::foreach(
         .SDcols = signals_good
     ]
 
-    # Getting the parameters to CSV to undo Box-Cox and scaling later ----
+    ## Getting the parameters to CSV to undo Box-Cox and scaling later ----
 
     params <- transformed[, lapply(.SD, function(x) {
         do.call("c", attributes(x))[c( # to ensure order consistency
@@ -215,19 +217,21 @@ cat("Box-Cox run time:", bc_time, "minutes\n")
 rm(signals)
 
 #==============================================================================#
-# Imputations ----
+# Imputation parameter estimates ----
 #==============================================================================#
 
 # Timing for the log
 start_i <- Sys.time()
 
-# Getting started on the imputations in parallel ====
+# Do we need to registerDoParallel again? -ac
+ncores = floor(parallel::detectCores()*opt$cores_frac)
+doParallel::registerDoParallel(cores = parallel::detectCores())
 
 imp_par <- foreach::"%do%"(foreach::foreach(i = as.character(yrmons)), {
 
     cat("Starting imputations for", i, "\n")
 
-    # Data prepping ----
+    ## Data prepping ----
 
     good <- names(checkMinObs(bctrans[[i]], min_obs = 2)) # Get cols we can use
     na_sort <- do.call("order", as.data.frame(-is.na(bctrans[[i]]))) #Sort by NA
