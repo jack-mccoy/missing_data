@@ -223,11 +223,7 @@ rm(signals)
 # Timing for the log
 start_i <- Sys.time()
 
-# Do we need to registerDoParallel again? -ac
-ncores = floor(parallel::detectCores()*opt$cores_frac)
-doParallel::registerDoParallel(cores = parallel::detectCores())
-
-imp_par <- foreach::"%do%"(foreach::foreach(i = as.character(yrmons)), {
+imp_par <- foreach::"%dopar%"(foreach::foreach(i = as.character(yrmons)), {
 
     cat("Starting imputations for", i, "\n")
 
