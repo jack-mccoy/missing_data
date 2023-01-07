@@ -7,10 +7,7 @@
 start_yr=1995
 end_yr=2020
 main_path="../output/"
-tmp_file_imp=paste0(main_path, "imp_tmp.csv")
-tmp_file_bc=paste0(main_path, "bc_tmp.csv")
 
- 
 # Parameters for principal component regressions
 signals_file=paste0(main_path, "signals.txt") # file with list of signals to use
 n_pcs=50 # number of PCs in maximal regression
@@ -22,20 +19,60 @@ sample_start_yr=((start_yr-n_years))
 
 # Paths
 params_path=paste0(main_path, "impute_ests/")
-output_path=paste0(main_path, "pcr_returns/")
+bcsignals_out_path=paste0(main_path, "bcsignals/")
+pcr_out_path=paste0(main_path, "pcr_returns/")
 
+dir.create(bcsignals_out_path, showWarnings = F)
+dir.create(pcr_out_path, showWarnings = F)
+
+# Big datasets bcsignals filenames
+tmp_file_bc=paste0(bcsignals_out_path, "bcsignals_none.csv")
+tmp_file_em=paste0(bcsignals_out_path, "bcsignals_em.csv")
+tmp_file_ac =paste0(bcsignals_out_path, "bcsignals_availcase.csv")
+
+# fraction of cores to use
+cores_frac = 0.5
 
 # Data prep ---------------------------------------------------------------
 
-# Submit the data prepping job
+# prep BC only data
 runme = paste0(
-  'Rscript 3a_prep_data_em.R'
+  'Rscript 3a_prep_big_data.R'
+  , ' --impute_type=none'
   , ' --impute_vec=', signals_file
   , ' --sample_start_year=', sample_start_yr
   , ' --sample_end_year=', end_yr
   , ' --params_path=', params_path
-  , ' --tmp_file_bc=', tmp_file_bc
-  , ' --tmp_file_imp=', tmp_file_imp
+  , ' --bcsignals_filename=', tmp_file_bc
+  , ' --cores_frac=', cores_frac
+)
+
+shell(runme)
+
+# prep EM data
+runme = paste0(
+  'Rscript 3a_prep_big_data.R'
+  , ' --impute_type=em'
+  , ' --impute_vec=', signals_file
+  , ' --sample_start_year=', sample_start_yr
+  , ' --sample_end_year=', end_yr
+  , ' --params_path=', params_path
+  , ' --bcsignals_filename=', tmp_file_em
+  , ' --cores_frac=', cores_frac  
+)
+
+shell(runme)
+
+# prep availcase data
+runme = paste0(
+  'Rscript 3a_prep_big_data.R'
+  , ' --impute_type=availcase'
+  , ' --impute_vec=', signals_file
+  , ' --sample_start_year=', sample_start_yr
+  , ' --sample_end_year=', end_yr
+  , ' --params_path=', params_path
+  , ' --bcsignals_filename=', tmp_file_ac
+  , ' --cores_frac=', cores_frac  
 )
 
 shell(runme)
@@ -52,35 +89,51 @@ for (yr in start_yr:end_yr){
     
     print(paste0('  month ', mon))
     
-    # simple mean (mn) imputations
-    runme = paste0(' Rscript 3b_pcr.R'
-    , ' --signals_keep=', signals_file
-    , ' --data_file=', tmp_file_bc
-    , ' --prefix=', "pcr_mn_"
-    , ' --out_path=', output_path
-    , ' --iter_year=', yr
-    , ' --iter_month=', mon
-    , ' --n_yrs=', n_years
-    , ' --quantile_prob=', quantile_prob
-    , ' --n_pcs=', n_pcs
-    )
-    
-    shell(runme)
-
-    # EM imputations
+    # Available case imputations
     runme = paste0(' Rscript 3b_pcr.R'
                    , ' --signals_keep=', signals_file
-                   , ' --data_file=', tmp_file_imp
-                   , ' --prefix=', "pcr_em_"
-                   , ' --out_path=', output_path
+                   , ' --data_file=', tmp_file_ac
+                   , ' --prefix=', "pcr_ac_"
+                   , ' --out_path=', pcr_out_path
                    , ' --iter_year=', yr
                    , ' --iter_month=', mon
                    , ' --n_yrs=', n_years
                    , ' --quantile_prob=', quantile_prob
                    , ' --n_pcs=', n_pcs
+                   , ' --cores_frac=', cores_frac                   
     )
+    shell(runme)    
     
+    # simple mean imputations
+    runme = paste0(' Rscript 3b_pcr.R'
+                   , ' --signals_keep=', signals_file
+                   , ' --data_file=', tmp_file_bc
+                   , ' --prefix=', "pcr_mn_"
+                   , ' --out_path=', pcr_out_path
+                   , ' --iter_year=', yr
+                   , ' --iter_month=', mon
+                   , ' --n_yrs=', n_years
+                   , ' --quantile_prob=', quantile_prob
+                   , ' --n_pcs=', n_pcs
+                   , ' --cores_frac=', cores_frac    
+    )
     shell(runme)
+    
+    # EM imputations
+    runme = paste0(' Rscript 3b_pcr.R'
+                   , ' --signals_keep=', signals_file
+                   , ' --data_file=', tmp_file_em
+                   , ' --prefix=', "pcr_em_"
+                   , ' --out_path=', pcr_out_path
+                   , ' --iter_year=', yr
+                   , ' --iter_month=', mon
+                   , ' --n_yrs=', n_years
+                   , ' --quantile_prob=', quantile_prob
+                   , ' --n_pcs=', n_pcs
+                   , ' --cores_frac=', cores_frac                   
+    )
+    shell(runme)
+        
   }
   
   toc = Sys.time()

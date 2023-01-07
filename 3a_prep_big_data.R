@@ -220,5 +220,5 @@ signals_new_list <- foreach::"%dopar%"(foreach::foreach(
 # Output ----
 #==============================================================================#
 
-fwrite(rbindlist(signals_new_list, fill = T), opt$big_data_filename)
+fwrite(rbindlist(signals_new_list, fill = T), opt$bcsignals_filename)
 
