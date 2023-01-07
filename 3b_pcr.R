@@ -23,7 +23,7 @@ option_list <- list(
     type = "character", default = "../output/signals.txt",
     help = "a comma-separated list of values or .txt file to scan"),
   optparse::make_option(c("--data_file"),
-    type = "character", default = "../output/imp_tmp.csv",
+    type = "character", default = "../output/bcsignals_em.csv",
     help = "path of imputed file"),
   optparse::make_option(c("--iter_year"),
     type = "numeric", default = 1990,

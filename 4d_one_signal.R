@@ -26,10 +26,10 @@ me_dat = fread("../data/crsp_data.csv") %>% select(permno,yyyymm,me) %>%
   mutate(yyyymm = round(yyyymm, 3)) 
 
 # signals 
-signals_mvn = fread('../output/imp_tmp.csv') %>% 
+signals_mvn = fread('../output/bcsignals/bcsignals_em.csv') %>% 
   mutate(yyyymm = round(yyyymm, 3)) 
 
-signals_simple = fread('../output/bc_tmp.csv') %>% 
+signals_simple = fread('../output/bcsignals/bcsignals_none.csv') %>% 
   mutate(yyyymm = round(yyyymm, 3))
 
 ## auto setup ----

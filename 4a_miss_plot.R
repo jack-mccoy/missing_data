@@ -19,7 +19,7 @@ dir.create(plot_path, showWarnings = F)
 # Read in the data ----
 #===============================================================================#
 
-dat <- fread("../output/bc_tmp.csv")[
+dat <- fread("../output/bcsignals/bcsignals_none.csv")[
   as.yearmon(yyyymm) %in% dates # Keep only the months we need
 ]
 

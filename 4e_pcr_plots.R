@@ -30,6 +30,31 @@ unique(fread(paste0(out_path, 'impute_ests/bcn_scale_Apr2000.csv'))$variable)
 # Pull in and format data ----
 #===============================================================================#
 
+# Fama-French factors 
+library(getPass)
+user = getPass('wrds username: ')
+pass = getPass('wrds password: ')
+
+wrds_con <- dbConnect(Postgres(),
+                      host = 'wrds-pgdata.wharton.upenn.edu',
+                      port = 9737,
+                      dbname = 'wrds',
+                      user = user,
+                      pass = pass)
+
+ff5_mom <- as.data.table(dbGetQuery(wrds_con, "
+    SELECT date, 
+        mktrf * 100 as mktrf, /* The PCR returns are in pct out of 100 */
+        smb * 100 as smb,
+        hml * 100 as hml,
+        rmw * 100 as rmw,
+        cma * 100 as cma,
+        umd * 100 as umd
+    FROM ff_all.fivefactors_monthly
+    ORDER BY date
+;"))
+
+
 # Each CSV is stored separately for a given month from different run of 2b_pcr.R
 pcr_em <- list()
 for (i in yrmons) {
@@ -45,7 +70,7 @@ pcr_em_1iter <- list()
 for (i in yrmons) {
   ym <- as.yearmon(paste0(substr(i, 1, 3), " ", substr(i, 4, 7)))
   tryCatch(
-    {pcr_em_1iter[[i]] <- fread(paste0(data_dir, "pcr_em_1iter_", i, ".csv"))[, yyyymm := ym]},
+    {pcr_em_1iter[[i]] <- fread(paste0(data_dir, "pcr_ac_", i, ".csv"))[, yyyymm := ym]},
     error = function(e) ""
   )
 }
@@ -80,24 +105,6 @@ pcr_all[
   by = .(type, weighting, pc)
 ]
 
-# Fama-French factors ----
-
-wrds_con <- dbConnect(Postgres(),
-    host = 'wrds-pgdata.wharton.upenn.edu',
-    port = 9737,
-    dbname = 'wrds')
-
-ff5_mom <- as.data.table(dbGetQuery(wrds_con, "
-    SELECT date, 
-        mktrf * 100 as mktrf, /* The PCR returns are in pct out of 100 */
-        smb * 100 as smb,
-        hml * 100 as hml,
-        rmw * 100 as rmw,
-        cma * 100 as cma,
-        umd * 100 as umd
-    FROM ff_all.fivefactors_monthly
-    ORDER BY date
-;"))
 
 #===============================================================================#
 # Regressions for alphas
