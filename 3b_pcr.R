@@ -1,3 +1,4 @@
+# runs pcr for (year, month) =  (opt$iter_year, opt$iter_month)
 
 #==============================================================================#
 # Packages ----
@@ -7,6 +8,8 @@ library(doParallel)
 library(data.table)
 library(foreach)
 library(zoo)
+
+closeAllConnections()
 
 #==============================================================================#
 # Option parsing ----
@@ -23,7 +26,7 @@ option_list <- list(
     type = "character", default = "../output/signals.txt",
     help = "a comma-separated list of values or .txt file to scan"),
   optparse::make_option(c("--data_file"),
-    type = "character", default = "../output/bcsignals_em.csv",
+    type = "character", default = "../output/bcsignals/bcsignals_em.csv",
     help = "path of imputed file"),
   optparse::make_option(c("--iter_year"),
     type = "numeric", default = 1990,
@@ -38,6 +41,9 @@ option_list <- list(
   optparse::make_option(c("--n_yrs"),
     type = "numeric", default = 7,
     help = "number of years to run for Fama-Macbeth principal component regressions"),
+  optparse::make_option(c("--scaled_pca"),
+    type = "logical", default = FALSE,
+    help = "logical to indicate if Huang et al 2022 scaled pca should be used"),  
   optparse::make_option(c("--quantile_prob"),
     type = "numeric", default = 0.2,
     help = paste0("the ratio out of 1 used to form long-short portfolios ",
@@ -47,7 +53,7 @@ option_list <- list(
     help = "maximum number of principal components to use in PCRs"),
   optparse::make_option(c("--cores_frac"),
     type = "numeric", default = 1.0,
-    help = "fraction of total cores to use")      
+    help = "fraction of total cores to use")
 )
 
 opt_parser <- optparse::OptionParser(option_list = option_list)
@@ -136,6 +142,33 @@ signals[
 # Define 'time_avail_m': the month of return prediction where signal was available
 signals[, time_avail_m := yyyymm + 1/12]
 
+#==============================================================================# 
+# Huang et al. Scaling (optional) ----
+#==============================================================================#
+
+if (opt$scaled_pca){
+  # regress bh1m on each signal, dropping current month's bh1m
+  temp = lapply(
+    opt$signals_keep
+    , function(signalname){
+      summary(lm(
+        paste0('bh1m ~ ', signalname)
+        , signals[time_avail_m < pred_mon]
+      ))$coefficients[signalname, 'Estimate']
+    }
+  )
+  slopedat = data.table(
+    signalname = opt$signals_keep, slope = as.numeric(temp)
+  )
+  
+  # re-scale with slope
+  slopemat = matrix(1, dim(signals)[1], 1) %*% t(as.matrix(slopedat$slope))
+  
+  signals = cbind(
+    signals[ , .SD, .SDcols = opt$signals_keep ] * slopemat
+    , signals[ , .SD, .SDcols = !opt$signals_keep] 
+  )
+}
 
 #==============================================================================# 
 # Run regressions ----
@@ -143,7 +176,7 @@ signals[, time_avail_m := yyyymm + 1/12]
 
 # Get principal components and form regression data
 pc <- prcomp(signals[, .SD, .SDcols = opt$signals_keep], 
-    center = TRUE, scale = TRUE)
+    center = FALSE, scale = FALSE)
 reg_data <- data.table(signals[, .(permno, time_avail_m, bh1m, me)], pc$x)
 
 # Max number of PCs we want to run
