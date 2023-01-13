@@ -233,41 +233,16 @@ imp_par <- foreach::"%dopar%"(foreach::foreach(i = as.character(yrmons)), {
     na_sort <- do.call("order", as.data.frame(-is.na(bctrans[[i]]))) #Sort by NA
     raw_i <- as.matrix(bctrans[[i]][na_sort, .SD, .SDcols = good]) # Final mat
 
-    # Intial mean and covariance matrix
-    E0 <- colMeans(raw_i, na.rm = T)
-    R0 <- cov(raw_i, use = "pairwise.complete.obs")
-    id <- diag(nrow = nrow(R0), ncol = ncol(R0))
+    # Initialize mean and cov matrix
+    #   enforce 0s on diagonal, as in the norm2 package
+    E0 = colMeans(raw_i, na.rm = T)
+    R0 = diag(diag(cov(raw_i, use = "pairwise.complete.obs"))) 
 
     # Error checking. Catch missing means and covariance
-    if (any(is.na(E0))) E0[which(is.na(E0))] <- 0
-    if (any(is.na(R0))) R0[is.na(R0)] <- id[is.na(R0)]
-
-    # Ensure covariance matrix is positive semi-definite ----
-
-    eig <- eigen(R0)
-    if (any(eig$values < 0)) {
-        j <- 1
-        while (any(eig$values < 0)) {
-            R0 <- structure(
-                (
-                    eig$vectors %*% 
-                    diag(ifelse(eig$values <= 0, 0, eig$values)) %*% 
-                    t(eig$vectors)
-                ),
-                dimnames = list(rownames(R0), colnames(R0))
-            )
-            eig <- eigen(R0)
-            if (j == 100) break
-        }
-        raw_i <- raw_i * matrix( # make it so data has same var as new cov mat
-            rep(sqrt(diag(R0)), nrow(raw_i)), 
-            byrow = T,
-            ncol = ncol(raw_i)
-        )
-    } 
+    if (any(is.na(E0))) stop(paste0('A signal has zero obs this month ', i))
+    if (any(is.na(R0))) stop(paste0('A signal has < 2 obs this month ', i))
 
     # Imputation algorithm ----
-
     em_out <- mvn_emf(raw_i, E0, R0, maxiter = opt$maxiter, tol = opt$tol,
         update_estE = FALSE)
 

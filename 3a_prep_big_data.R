@@ -19,7 +19,7 @@ library(zoo)
 option_list <- list(
     optparse::make_option(c("--impute_type"),
         type = "character", 
-        default = "none",
+        default = "availcase",
         help = "type of imputation: (none, em, availcase)"),  
     optparse::make_option(c("--impute_vec"),
         type = "character", default = "../output/signals.txt",
@@ -147,34 +147,7 @@ signals_new_list <- foreach::"%dopar%"(foreach::foreach(
 
   # Imputation ----
   if (opt$impute_type %in% c('em', 'availcase')){
-    
-    # Deal with negative eigenvalues here 
-    R0 <- cov(signals_tmp[, .SD, .SDcols = good], use = "pairwise.complete.obs")
-    id <- diag(nrow = nrow(R0), ncol = ncol(R0))
-    
-    # Error checking. Catch missing means and covariance
-    if (any(is.na(R0))) R0[is.na(R0)] <- id[is.na(R0)]
-    
-    # Ensure covariance matrix is positive semi-definite 
-    eig <- eigen(R0)
-    if (any(eig$values < 0)) {
-      k <- 1
-      while (any(eig$values < 0)) {
-        R0 <- structure(
-          eig$vectors %*% diag(ifelse(eig$values <= 0, 0, eig$values)) %*% t(eig$vectors),
-          dimnames = list(rownames(R0), colnames(R0))
-        )
-        eig <- eigen(R0)
-        if (k == 100) break
-      }
-      # ac: not sure we want to do this
-      signals_tmp[, # Now make it so that data has same variance as new cov mat
-          (good) := foreach::"%do%"(foreach::foreach(j = good), {
-            signals_tmp[, get(j)] * R0[j, j]
-          })
-      ]
-    }       
-    
+
     # Get the imputation parameters (depending on em or availcase)
     if (opt$impute_type == 'em'){
       # em imputation settings
@@ -192,6 +165,9 @@ signals_new_list <- foreach::"%dopar%"(foreach::foreach(
       tmpmat = signals_tmp[ , ..good]
       estE = colMeans(tmpmat, na.rm=T)
       estR = cov(tmpmat, use = 'pairwise.complete.obs')
+      if (min(eigen(estR)$values)<0){
+        estR = nearest_spd(estR) # ensure PSD
+      }
       maxiter = 1
     }
     

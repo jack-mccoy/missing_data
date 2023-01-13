@@ -26,6 +26,9 @@ yrmons <- gsub(
 # check 
 unique(fread(paste0(out_path, 'impute_ests/bcn_scale_Apr2000.csv'))$variable)
 
+# create plots folder
+dir.create(paste0(out_path, 'plots/'))
+
 #===============================================================================#
 # Pull in and format data ----
 #===============================================================================#

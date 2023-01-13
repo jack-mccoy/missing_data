@@ -33,6 +33,9 @@ tmp_file_ac =paste0(bcsignals_out_path, "bcsignals_availcase.csv")
 # fraction of cores to use
 cores_frac = 0.5
 
+# switch to using Huang et al scaled pca
+scaled_pca = T
+
 # Data prep ---------------------------------------------------------------
 
 # prep BC only data
@@ -100,7 +103,8 @@ for (yr in start_yr:end_yr){
                    , ' --n_yrs=', n_years
                    , ' --quantile_prob=', quantile_prob
                    , ' --n_pcs=', n_pcs
-                   , ' --cores_frac=', cores_frac                   
+                   , ' --cores_frac=', cores_frac
+                   , ' --scaled_pca=', scaled_pca
     )
     shell(runme)    
     
@@ -116,6 +120,7 @@ for (yr in start_yr:end_yr){
                    , ' --quantile_prob=', quantile_prob
                    , ' --n_pcs=', n_pcs
                    , ' --cores_frac=', cores_frac    
+                   , ' --scaled_pca=', scaled_pca                   
     )
     shell(runme)
     
@@ -130,7 +135,8 @@ for (yr in start_yr:end_yr){
                    , ' --n_yrs=', n_years
                    , ' --quantile_prob=', quantile_prob
                    , ' --n_pcs=', n_pcs
-                   , ' --cores_frac=', cores_frac                   
+                   , ' --cores_frac=', cores_frac         
+                   , ' --scaled_pca=', scaled_pca                   
     )
     shell(runme)
         
