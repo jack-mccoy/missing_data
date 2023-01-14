@@ -33,7 +33,7 @@ dir.create(paste0(out_path, 'plots/'))
 # Pull in and format data ----
 #===============================================================================#
 
-# Fama-French factors 
+# Fama-French factors
 library(getPass)
 user = getPass('wrds username: ')
 pass = getPass('wrds password: ')
@@ -46,7 +46,7 @@ wrds_con <- dbConnect(Postgres(),
                       pass = pass)
 
 ff5_mom <- as.data.table(dbGetQuery(wrds_con, "
-    SELECT date, 
+    SELECT date,
         mktrf * 100 as mktrf, /* The PCR returns are in pct out of 100 */
         smb * 100 as smb,
         hml * 100 as hml,
@@ -58,48 +58,39 @@ ff5_mom <- as.data.table(dbGetQuery(wrds_con, "
 ;"))
 
 
-# Each CSV is stored separately for a given month from different run of 2b_pcr.R
-pcr_em <- list()
-for (i in yrmons) {
-  ym <- as.yearmon(paste0(substr(i, 1, 3), " ", substr(i, 4, 7)))
-  tryCatch(
-    {pcr_em[[i]] <- fread(paste0(data_dir, "pcr_em_", i, ".csv"))[, yyyymm := ym]},
-    error = function(e) ""
+# function for importing one (imputation, pcr) spec
+import_ret_csv = function(ret_csv_path){
+  
+  list_csv_files <- list.files(path =ret_csv_path, full.names = TRUE)
+  ret = lapply(
+    list_csv_files
+    , function(fname){
+      fname = list_csv_files[1]
+      ym = as.yearmon(substr(fname, nchar(fname)-10, nchar(fname)-4))
+      ret = fread(fname)
+      ret$yyyymm = ym
+      ret$date = as.Date(ret$yyyymm)
+      ret
+    }
   )
+  ret = do.call(rbind, ret)
+  ret = melt(ret
+             , id.vars = c('pc','n_signals','yyyymm','date')
+             , variable.name = 'weighting'
+             , value.name = 'ls_ret'
+             )
 }
 
-# NEW: single iteration of EM runs
-pcr_em_1iter <- list()
-for (i in yrmons) {
-  ym <- as.yearmon(paste0(substr(i, 1, 3), " ", substr(i, 4, 7)))
-  tryCatch(
-    {pcr_em_1iter[[i]] <- fread(paste0(data_dir, "pcr_ac_", i, ".csv"))[, yyyymm := ym]},
-    error = function(e) ""
-  )
-}
+pcr_em = import_ret_csv(paste0(data_dir, 'em/'))
+pcr_ac = import_ret_csv(paste0(data_dir, 'ac/'))
+pcr_mn = import_ret_csv(paste0(data_dir, 'mn/'))
 
-pcr_mn <- list()
-for (i in yrmons) {
-  ym <- as.yearmon(paste0(substr(i, 1, 3), " ", substr(i, 4, 7)))
-  tryCatch(
-    {pcr_mn[[i]] <- fread(paste0(data_dir, "pcr_mn_", i, ".csv"))[, yyyymm := ym]},
-    error = function(e) ""
-  )
-}
+pcr_all = rbind(
+  pcr_em[, type := "EM Algo"]
+  , pcr_ac[, type := "Available Case"]
+  , pcr_mn[, type := "Simple Mean"]  
+)
 
-pcr_all <- rbind(
-    melt(rbindlist(pcr_em), 
-        id.vars = c("pc", "n_signals", "yyyymm"), 
-        variable.name = "weighting", value.name = "ls_ret")[, type := "EM Algo"],
-    melt(rbindlist(pcr_em_1iter), 
-        id.vars = c("pc", "n_signals", "yyyymm"), 
-        variable.name = "weighting", value.name = "ls_ret")[, type := "Available Case"],
-    melt(rbindlist(pcr_mn), 
-        id.vars = c("pc", "n_signals", "yyyymm"), 
-        variable.name = "weighting", value.name = "ls_ret")[, type := "Simple Mean"]
-)[,
-    date := as.Date(yyyymm)
-]
 
 # Add in the cumulative returns
 pcr_all[
@@ -110,7 +101,7 @@ pcr_all[
 
 
 #===============================================================================#
-# Regressions for alphas
+# Regressions for alphas ----
 #===============================================================================#
 
 # Merge data to align PC returns with FF5 factors
@@ -119,7 +110,7 @@ reg_data <- merge(pcr_all, ff5_mom, by = 'date')
 # Set the sequence of PCs to iterate through
 pcs <- seq(min(pcr_all$pc), max(pcr_all$pc))
 
-# FF5 + Mom regresions ----
+# FF5 + Mom regresions ---
 
 # Alphas from EM-based strategy
 alphas_em_ff5 <- melt(
@@ -160,7 +151,7 @@ alphas_avail_ff5 <- melt(
     id = 'pc', value.name = 'alpha_ff5', variable.name = 'weighting'
 )[, ":="(type = 'Available Case')]
 
-# CAPM regressions ----
+# CAPM regressions ---
 
 # Alphas from EM-based strategy
 alphas_em_capm <- melt(

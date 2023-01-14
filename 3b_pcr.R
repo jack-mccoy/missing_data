@@ -20,7 +20,7 @@ on_cluster = Sys.getenv('SGE_TASK_ID') != ""
 
 option_list <- list(
   optparse::make_option(c("--out_path"),
-    type = "character", default = "../output/pcr_returns/",
+    type = "character", default = "../output/pcr_returns/em/",
     help = "directory to store output to"),
   optparse::make_option(c("--signals_keep"),
     type = "character", default = "../output/signals.txt",
@@ -35,15 +35,15 @@ option_list <- list(
     type = "numeric", 
     default = ifelse(on_cluster, as.integer(Sys.getenv("SGE_TASK_ID")), 5),
     help = "month for making prediction (numeric)"),
-  optparse::make_option(c("--prefix"),
-    type = "character", default = "pcr_em_",
-    help = "prefix of output files"),
   optparse::make_option(c("--n_yrs"),
     type = "numeric", default = 7,
     help = "number of years to run for Fama-Macbeth principal component regressions"),
   optparse::make_option(c("--scaled_pca"),
     type = "logical", default = FALSE,
     help = "logical to indicate if Huang et al 2022 scaled pca should be used"),  
+  optparse::make_option(c("--scaled_pca_weight"),
+    type = "character", default = "ew",
+    help = "ew or vw: allows value-weighted scaled pca"),
   optparse::make_option(c("--quantile_prob"),
     type = "numeric", default = 0.2,
     help = paste0("the ratio out of 1 used to form long-short portfolios ",
@@ -75,6 +75,7 @@ if (substr(opt$out_path, nchar(opt$out_path), nchar(opt$out_path)) != "/") {
 }
 
 # make dir 
+# note: does not make all the folders required for out_path, necessarily
 dir.create(opt$out_path, showWarnings = F)
 
 #==============================================================================#
@@ -147,13 +148,23 @@ signals[, time_avail_m := yyyymm + 1/12]
 #==============================================================================#
 
 if (opt$scaled_pca){
+  
+  # set up weights
+  if (opt$scaled_pca_weight == 'ew'){
+    signals$tempw = 1
+  } else if (opt$scaled_pca_weight == 'vw') {
+    signals$tempw = signals$me
+  } else {
+    stop('opt$scaled_pca_weight invalid')
+  }
+  
   # regress bh1m on each signal, dropping current month's bh1m
   temp = lapply(
     opt$signals_keep
     , function(signalname){
       summary(lm(
-        paste0('bh1m ~ ', signalname)
-        , signals[time_avail_m < pred_mon]
+        paste0('bh1m ~ ', signalname), signals[time_avail_m < pred_mon]
+        , weights = tempw
       ))$coefficients[signalname, 'Estimate']
     }
   )
@@ -239,7 +250,7 @@ pcr_pred <- foreach::"%dopar%"(foreach::foreach(
 #==============================================================================#
 
 fwrite(rbindlist(pcr_pred)[, n_signals := length(opt$signals_keep)], 
-  paste0(opt$out_path, opt$prefix, 
+  paste0(opt$out_path, 'ret_pc_', 
     gsub("[[:space:]]", "", as.character(pred_mon)), ".csv"))
 
 

@@ -33,9 +33,6 @@ tmp_file_ac =paste0(bcsignals_out_path, "bcsignals_availcase.csv")
 # fraction of cores to use
 cores_frac = 0.5
 
-# switch to using Huang et al scaled pca
-scaled_pca = T
-
 # Data prep ---------------------------------------------------------------
 
 # prep BC only data
@@ -92,53 +89,49 @@ for (yr in start_yr:end_yr){
     
     print(paste0('  month ', mon))
     
-    # Available case imputations
-    runme = paste0(' Rscript 3b_pcr.R'
-                   , ' --signals_keep=', signals_file
-                   , ' --data_file=', tmp_file_ac
-                   , ' --prefix=', "pcr_ac_"
-                   , ' --out_path=', pcr_out_path
-                   , ' --iter_year=', yr
-                   , ' --iter_month=', mon
-                   , ' --n_yrs=', n_years
-                   , ' --quantile_prob=', quantile_prob
-                   , ' --n_pcs=', n_pcs
-                   , ' --cores_frac=', cores_frac
-                   , ' --scaled_pca=', scaled_pca
-    )
-    shell(runme)    
+    ## Regular PCA ----
     
     # simple mean imputations
     runme = paste0(' Rscript 3b_pcr.R'
+                   , ' --out_path=../output/pcr_returns/mn/'
                    , ' --signals_keep=', signals_file
                    , ' --data_file=', tmp_file_bc
-                   , ' --prefix=', "pcr_mn_"
-                   , ' --out_path=', pcr_out_path
                    , ' --iter_year=', yr
                    , ' --iter_month=', mon
                    , ' --n_yrs=', n_years
                    , ' --quantile_prob=', quantile_prob
                    , ' --n_pcs=', n_pcs
                    , ' --cores_frac=', cores_frac    
-                   , ' --scaled_pca=', scaled_pca                   
     )
     shell(runme)
     
     # EM imputations
     runme = paste0(' Rscript 3b_pcr.R'
+                   , ' --out_path=../output/pcr_returns/em/'
                    , ' --signals_keep=', signals_file
                    , ' --data_file=', tmp_file_em
-                   , ' --prefix=', "pcr_em_"
-                   , ' --out_path=', pcr_out_path
                    , ' --iter_year=', yr
                    , ' --iter_month=', mon
                    , ' --n_yrs=', n_years
                    , ' --quantile_prob=', quantile_prob
                    , ' --n_pcs=', n_pcs
-                   , ' --cores_frac=', cores_frac         
-                   , ' --scaled_pca=', scaled_pca                   
+                   , ' --cores_frac=', cores_frac    
     )
     shell(runme)
+    
+    # Available case imputations
+    runme = paste0(' Rscript 3b_pcr.R'
+                   , ' --out_path=../output/pcr_returns/ac/'
+                   , ' --signals_keep=', signals_file
+                   , ' --data_file=', tmp_file_ac
+                   , ' --iter_year=', yr
+                   , ' --iter_month=', mon
+                   , ' --n_yrs=', n_years
+                   , ' --quantile_prob=', quantile_prob
+                   , ' --n_pcs=', n_pcs
+                   , ' --cores_frac=', cores_frac    
+    )
+    shell(runme)        
         
   }
   

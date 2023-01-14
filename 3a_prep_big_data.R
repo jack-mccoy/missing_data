@@ -19,7 +19,7 @@ library(zoo)
 option_list <- list(
     optparse::make_option(c("--impute_type"),
         type = "character", 
-        default = "availcase",
+        default = "em",
         help = "type of imputation: (none, em, availcase)"),  
     optparse::make_option(c("--impute_vec"),
         type = "character", default = "../output/signals.txt",
@@ -32,7 +32,7 @@ option_list <- list(
         help = "year that sample ends"),
     optparse::make_option(c("--bcsignals_filename"),
         type = "character", 
-        default = "../output/bcsignals_none.csv",
+        default = "../output/bcsignals/bcsignals_em.csv",
         help = "name of temporary output file for dataset"),
     optparse::make_option(c("--params_path"),
         type = "character", 
@@ -60,6 +60,9 @@ if (grepl("\\.txt", opt$impute_vec)) {
 if (substr(opt$params_path, nchar(opt$params_path), nchar(opt$params_path)) != "/") {
   opt$params_path <- paste0(opt$params_path, "/")
 }
+
+# default output folder 
+dir.create('../output/bcsignals/', showWarnings = F)
 
 #==============================================================================#
 # Functions ----
@@ -165,9 +168,23 @@ signals_new_list <- foreach::"%dopar%"(foreach::foreach(
       tmpmat = signals_tmp[ , ..good]
       estE = colMeans(tmpmat, na.rm=T)
       estR = cov(tmpmat, use = 'pairwise.complete.obs')
-      if (min(eigen(estR)$values)<0){
-        estR = nearest_spd(estR) # ensure PSD
-      }
+      
+      # use Highham's method to ensure PSD
+      # e.g. https://github.com/cran/pracma/blob/c1688b374d201c13fb40b4dda2d2a89e34b94ec6/R/nearest_spd.R
+      eig <- eigen(estR)
+      if (any(eig$values < 0)) {
+        k <- 1
+        while (any(eig$values < 0)) {
+          estR <- structure(
+            eig$vectors %*% diag(ifelse(eig$values <= 0, 0, eig$values)) %*% t(eig$vectors),
+            dimnames = list(rownames(estR), colnames(estR))
+          )
+          eig <- eigen(estR)
+          if (k == 100) break
+        }
+      } 
+      
+      # avail case is just 1 iter of EM
       maxiter = 1
     }
     
