@@ -79,15 +79,6 @@ ret[
   by = .(forecast, imp, weighting, pc)
 ]
 
-# check
-ret %>% 
-  group_by(weighting, forecast, imp, pc) %>% 
-  summarize(
-    rbar = mean(ls_ret)
-  ) %>% 
-  pivot_wider(names_from = 'forecast', values_from = 'rbar') %>% 
-  print(n=100)
-
 
 #===============================================================================#
 # Regressions for alphas ----
@@ -190,7 +181,7 @@ for (cur_fore in fore_list){
 # Cumulative returns over time ----
 
 cumret_plot <- ggplot(
-    ret[pc %in% c(2, 10, 25, 37)],
+    ret[pc %in% c(3, 5, max(ret$pc)) & forecast == 'pca'],
     aes(x = yyyymm, y = cumret)
   ) +
   geom_line(aes(colour = factor(pc), linetype = paste0(weighting, ", ", imp))) + 
@@ -211,3 +202,12 @@ cumret_plot <- ggplot(
 
 
 
+
+# check
+ret %>% 
+  group_by(weighting, forecast, imp, pc) %>% 
+  summarize(
+    rbar = mean(ls_ret)
+  ) %>% 
+  pivot_wider(names_from = 'forecast', values_from = 'rbar') %>% 
+  print(n=100)

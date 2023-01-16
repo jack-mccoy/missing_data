@@ -5,12 +5,12 @@
 # Settings ----------------------------------------------------------------
 
 start_yr=1995
-end_yr=1995+10
+end_yr=2020
 main_path="../output/"
 
 # Parameters for principal component regressions
-signals_file=paste0(main_path, "signals_10.txt") # file with list of signals to use
-n_pcs=9 # number of PCs in maximal regression
+signals_file=paste0(main_path, "signals.txt") # file with list of signals to use
+n_pcs=50 # number of PCs in maximal regression
 n_years=10 # number of years for principal components/predictive regs
 quantile_prob=0.1 # quantile to form long/short portfolios (0.1 means deciles)
 
@@ -34,7 +34,7 @@ tmp_file_ac =paste0(bcsignals_out_path, "bcsignals_availcase.csv")
 cores_frac = 0.5
 
 # data prep or skip
-make_bcsignals = FALSE
+make_bcsignals = TRUE
 
 # Data prep ---------------------------------------------------------------
 
