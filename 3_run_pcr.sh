@@ -2,10 +2,8 @@
 
 # Parameters to control the jobs
 start_yr=1995
-end_yr=2020
+end_yr=1996
 main_path="../output/"
-tmp_file_imp="$main_path/imp_tmp.csv"
-tmp_file_bc="$main_path/bc_tmp.csv"
 
 # Parameters for principal component regressions
 signals_file="$main_path/signals_best125_1985.txt" # file with list of signals to use
@@ -18,66 +16,124 @@ sample_start_yr=$(($start_yr-$n_years))
 
 # Paths
 params_path="$main_path/impute_ests/" 
-output_path="$main_path/pcr_returns/"
+
+# Big datasets
+tmp_file_mn="$main_path/bcsignals_non.csv"
+tmp_file_em="$main_path/bcsignals_em.csv"
+tmp_file_ac="$main_path/bcsignals_availcase.csv"
 
 # Submit the data prepping job
-out=$(Rscript --grid_submit=batch \
-    --grid_hold=6726172 \
+out_mn=$(Rscript --grid_submit=batch \
     --grid_ncpus=12 \
     --grid_mem=200G \
     --grid_email="jmccoy26@gsb.columbia.edu" \
-    3a_prep_data_em.R \
+    3a_prep_big_data.R \
+        --impute_type="none"
         --impute_vec=$signals_file \
         --sample_start_year=$sample_start_yr \
         --sample_end_year=$end_yr \
         --params_path=$params_path \
-        --tmp_file_bc=$tmp_file_bc \
-        --tmp_file_imp=$tmp_file_imp)
+        --bcsignals_filename=$tmp_file_mn
+
+out_em=$(Rscript --grid_submit=batch \
+    --grid_ncpus=12 \
+    --grid_mem=200G \
+    --grid_email="jmccoy26@gsb.columbia.edu" \
+    3a_prep_big_data.R \
+        --impute_type="em"
+        --impute_vec=$signals_file \
+        --sample_start_year=$sample_start_yr \
+        --sample_end_year=$end_yr \
+        --params_path=$params_path \
+        --bcsignals_filename=$tmp_file_em
+
+out_ac=$(Rscript --grid_submit=batch \
+    --grid_ncpus=12 \
+    --grid_mem=200G \
+    --grid_email="jmccoy26@gsb.columbia.edu" \
+    3a_prep_big_data.R \
+        --impute_type="availcase"
+        --impute_vec=$signals_file \
+        --sample_start_year=$sample_start_yr \
+        --sample_end_year=$end_yr \
+        --params_path=$params_path \
+        --bcsignals_filename=$tmp_file_ac
 
 # Extract the job ID for monitoring
-jobid=$( echo $out | grep -o -E '[0-9]+' )
+jobid_mn=$( echo $out_mn | grep -o -E '[0-9]+' )
+jobid_em=$( echo $out_em | grep -o -E '[0-9]+' )
+jobid_ac=$( echo $out_ac | grep -o -E '[0-9]+' )
 
 # Run the PCR with the new data
 # These take up so much memory that I need to do one year at a time
 # But they each run relatively quickly
-iter=0
 for _yr in ` $start_yr $end_yr `; do
-
-    # Simple mean imputations
-    Rscript --grid_submit=batch \
-        --grid_hold=$jobid \
-        --grid_ncpus=10 \
-        --grid_mem=250G \
-        --grid_SGE_TASK_ID=1-4 \
-        --grid_email="jmccoy26@gsb.columbia.edu" \
-        3b_pcr.R \
-            --signals_keep=$signals_file \
-            --data_file=$tmp_file_bc \
-            --prefix="pcr_mn_" \
-            --out_path=$output_path \
-            --iter_year=$_yr \
-            --n_yrs=$n_years \
-            --quantile_prob=$quantile_prob \
-            --n_pcs=$n_pcs
-
-    # EM imputations
-    Rscript --grid_submit=batch \
-        --grid_hold=$jobid \
-        --grid_ncpus=10 \
-        --grid_mem=250G \
-        --grid_SGE_TASK_ID=1-4 \
-        --grid_email="jmccoy26@gsb.columbia.edu" \
-        3b_pcr.R \
-            --signals_keep=$signals_file \
-            --data_file=$tmp_file_imp \
-            --prefix="pcr_em_" \
-            --out_path=$output_path \
-            --iter_year=$_yr \
-            --n_yrs=$n_years \
-            --quantile_prob=$quantile_prob \
-            --n_pcs=$n_pcs
-
-    # Increment for next year
-    ((iter+=1))
+    for forecast in "pca" "spca1" "spca2"; do 
+        
+        if [ $forecast = "pca" ]; then
+            scaled_pca="FALSE"
+            scaled_pca_weight="ew"
+        elif [ $forecast = "spca1" ]; then
+            scaled_pca="TRUE"
+            scaled_pca_weight="ew"
+        elif [ $forecast = "spca1" ]; then
+            scaled_pca="TRUE"
+            scaled_pca_weight="vw"
+        fi
+        
+        # Simple mean imputations
+        Rscript --grid_submit=batch \
+            --grid_hold=$jobid_mn \
+            --grid_ncpus=10 \
+            --grid_mem=250G \
+            --grid_SGE_TASK_ID=1-12 \
+            --grid_email="jmccoy26@gsb.columbia.edu" \
+            3b_pcr.R \
+                --signals_keep=$signals_file \
+                --data_file=$tmp_file_mn \
+                --out_path="$main_path/pcr_returns/${forecast}_mn/" \
+                --scaled_pca=$scaled_pca \
+                --scaled_pca_weight=$scaled_pca_weight \
+                --iter_year=$_yr \
+                --n_yrs=$n_years \
+                --quantile_prob=$quantile_prob \
+                --n_pcs=$n_pcs
+        
+        # EM imputations
+        Rscript --grid_submit=batch \
+            --grid_hold=$jobid_em \
+            --grid_ncpus=10 \
+            --grid_mem=250G \
+            --grid_SGE_TASK_ID=1-12 \
+            --grid_email="jmccoy26@gsb.columbia.edu" \
+            3b_pcr.R \
+                --signals_keep=$signals_file \
+                --data_file=$tmp_file_em \
+                --out_path="$main_path/pcr_returns/${forecast}_em/" \
+                --scaled_pca=$scaled_pca \
+                --scaled_pca_weight=$scaled_pca_weight \
+                --iter_year=$_yr \
+                --n_yrs=$n_years \
+                --quantile_prob=$quantile_prob \
+                --n_pcs=$n_pcs
+        
+        # available case
+        Rscript --grid_submit=batch \
+            --grid_hold=$jobid_ac \
+            --grid_ncpus=10 \
+            --grid_mem=250G \
+            --grid_SGE_TASK_ID=1-12 \
+            --grid_email="jmccoy26@gsb.columbia.edu" \
+            3b_pcr.R \
+                --signals_keep=$signals_file \
+                --data_file=$tmp_file_ac \
+                --out_path="$main_path/pcr_returns/${forecast}_ac/" \
+                --scaled_pca=$scaled_pca \
+                --scaled_pca_weight=$scaled_pca_weight \
+                --iter_year=$_yr \
+                --n_yrs=$n_years \
+                --quantile_prob=$quantile_prob \
+                --n_pcs=$n_pcs
+    done
 done
 
