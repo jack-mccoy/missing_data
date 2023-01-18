@@ -10,16 +10,16 @@ library(RPostgres)
 library(zoo)
 library(dplyr) 
 library(stringr)
+library(tidyr)
 source('functions.R')
 
 #===============================================================================#
 # Hardcodes ----
 #===============================================================================#
 
-pc_ret_path = '../output/pc_returns/'
+pc_ret_path = '../output/pcr_returns/'
 
-plot_path = '../plots/'
-
+plot_path = '../output/plots/'
 
 #===============================================================================#
 # Pull in and format data ----
@@ -32,10 +32,10 @@ ff5_mom = fread('../data/ff5_factors.csv')
 spec_dat = data.table(dir = list.files(pc_ret_path)) %>%
   mutate(temp = dir) %>%   
   mutate(
-    forecast = str_split_i(dir, '_', 1)
-    , imp = str_split_i(dir, '_', 2)
+    forecast = str_split_fixed(dir, '_', 2)[,1],
+    imp = str_split_fixed(dir, '_', 2)[,2]
   )
-  
+ 
 # function for importing one spec
 import_ret_csv = function(cur_spec){
   
@@ -64,13 +64,10 @@ import_ret_csv = function(cur_spec){
 }
 
 # import all specs
-ret = lapply(
-  1:dim(spec_dat)[1]
-  , function(i) {
-    import_ret_csv(spec_dat[i, ])
-  }
-) %>% 
-  rbindlist
+ret <- rbindlist(lapply(1:dim(spec_dat)[1], 
+    function(i) import_ret_csv(spec_dat[i, ]))) 
+
+print('here')
 
 # cumulative returns
 ret[
@@ -78,7 +75,6 @@ ret[
   cumret := log(cumprod(1 + ifelse(is.na(ls_ret/100), 0, ls_ret/100))),
   by = .(forecast, imp, weighting, pc)
 ]
-
 
 #===============================================================================#
 # Regressions for alphas ----
@@ -161,19 +157,19 @@ for (cur_fore in fore_list){
   )
   
   ggsave(plot = mn,
-         filename = paste0(main_path, "plots/", cur_fore, "_expected_rets.pdf"),
+         filename = paste0(plot_path, cur_fore, "_expected_rets.pdf"),
          width = 8, height = 5, unit = "in", scale = scale_gg)
   
   ggsave(plot = sharpe, 
-         filename = paste0(main_path, "plots/", cur_fore, "_sharpes.pdf"),
+         filename = paste0(plot_path, cur_fore, "_sharpes.pdf"),
          width = 8, height = 5, unit = "in", scale = scale_gg)
   
   ggsave(plot = alpha_capm,
-         filename = paste0(main_path, "plots/", cur_fore, "_alpha_capm.pdf"),
+         filename = paste0(plot_path, cur_fore, "_alpha_capm.pdf"),
          width = 8, height = 5, unit = "in", scale = scale_gg)
   
   ggsave(plot = alpha_ff5, 
-         filename = paste0(main_path, "plots/", cur_fore, "_alpha_ff5_mom.pdf"),
+         filename = paste0(plot_path, cur_fore, "_alpha_ff5_mom.pdf"),
          width = 8, height = 5, unit = "in", scale = scale_gg)
   
 }

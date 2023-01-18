@@ -13,7 +13,7 @@ library(tidyverse)
 dir.create('../data/', showWarnings = F)
 dir.create('../output/', showWarnings = F)
 
-## log in ----
+# log in ----
 wrds_user <- getPass::getPass("WRDS username: ")
 wrds_pass <- getPass::getPass("WRDS pass: ")
 
@@ -43,8 +43,6 @@ crspm <- as.data.table(DBI::dbGetQuery(wrds, "
         ON a.permno=c.permno
         AND date_trunc('month', a.date) = date_trunc('month', c.dlstdt)
 ;"))
-
-DBI::dbDisconnect(wrds)
 
 ## Delisting returns ----
 
@@ -106,6 +104,8 @@ ff5_mom <- as.data.table(dbGetQuery(wrds, "
     FROM ff_all.fivefactors_monthly
     ORDER BY date
 ;"))
+
+DBI::dbDisconnect(wrds)
 
 fwrite(ff5_mom, "../data/ff5_factors.csv")
 
