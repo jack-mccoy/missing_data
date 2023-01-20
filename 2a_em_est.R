@@ -1,6 +1,6 @@
 
 #==============================================================================#
-# Packages
+# Packages ----
 #==============================================================================#
 
 library(car) # Box-Cox stuff
@@ -10,19 +10,23 @@ library(RPostgres) # SQL query to WRDS
 library(zoo) # yearmon convention is nice to work with here
 
 #==============================================================================#
-# Option parsing
+# Option parsing ----
 #==============================================================================#
+
+# check if on cluster
+on_cluster = Sys.getenv('SGE_TASK_ID') != ""
 
 option_list <- list(
     optparse::make_option(c("--impute_yr"),
-        type = "numeric", default = as.integer(Sys.getenv("SGE_TASK_ID")),
+        type = "numeric", 
+        default = ifelse(on_cluster, as.integer(Sys.getenv("SGE_TASK_ID")), 1990),
         help = "year of data to impute"),
     optparse::make_option(c("--boxcox"),
         type = "logical", default = FALSE, action = "store_true",
         help = "logical to indicate if Box-Cox transformations should be done before imputing"),
     optparse::make_option(c("--out_path"),
         type = "character", 
-        default = "./",
+        default = "../output/impute_ests/",
         help = "directory to store output to"),
     optparse::make_option(c("--impute_vec"),
         type = "character", default = "bm,mom6m",
@@ -35,7 +39,10 @@ option_list <- list(
         help = "a numeric value for the convergence check"),
     optparse::make_option(c("--force_convergence", "-f"),
         type = "logical", default = FALSE, action = "store_true",
-        help = "logical to override maxiter and run the EM procedure until it converges to tol")
+        help = "logical to override maxiter and run the EM procedure until it converges to tol"),
+    optparse::make_option(c("--cores_frac"),
+        type = "numeric", default = 1.0,
+        help = "fraction of total cores to use")    
 )
 
 opt_parser <- optparse::OptionParser(option_list = option_list)
@@ -52,20 +59,21 @@ if (grepl("\\.txt", opt$impute_vec)) {
 }
 
 #==============================================================================#
-# Hardcodes
+# Setup ----
 #==============================================================================#
 
 # Months to impute
 yrmons <- zoo::as.yearmon(paste0(month.abb, " ", opt$impute_yr))
 
-#==============================================================================#
-# Functions
-#==============================================================================#
-
 source("functions.R")
 
+# make output folder
+dir.create(opt$out_path, showWarnings = F)
+
+closeAllConnections()
+
 #==============================================================================#
-# Read in data
+# Read in data ----
 #==============================================================================#
 
 # Read in the signals we want 
@@ -82,7 +90,7 @@ crsp_data <- fread("../data/crsp_data.csv")
 crsp_data[, yyyymm := as.yearmon(yyyymm)]
 
 #==============================================================================#
-# Ensure we have all good variables
+# Ensure we have all good variables ----
 #==============================================================================#
 
 signals <- merge(signals, crsp_data, by = c("permno", "yyyymm"))
@@ -111,8 +119,10 @@ rm(crsp_data)
 cat("There are a total of", length(signals_good), "signals with enough data.\n")
 print(signals_good)
 
+print(head(signals))
+
 #==============================================================================#
-# Box-Cox transformations and scaling
+# Box-Cox transformations and scaling ----
 #==============================================================================#
 
 # Get vector of time periods to run through 
@@ -124,8 +134,12 @@ yrmons <- yrmons[order(yrmons)]
 
 start_b <- Sys.time()
 
+ncores = floor(parallel::detectCores()*opt$cores_frac)
 doParallel::registerDoParallel(cores = parallel::detectCores())
-bctrans <- foreach::"%dopar%"(foreach::foreach(i = yrmons), {
+
+bctrans <- foreach::"%dopar%"(foreach::foreach(
+  i = yrmons, .packages = c('data.table','zoo')
+  ), {
 
     cat("Box-Cox transformations for", as.character(i), "\n")
 
@@ -167,7 +181,7 @@ bctrans <- foreach::"%dopar%"(foreach::foreach(i = yrmons), {
         .SDcols = signals_good
     ]
 
-    # Getting the parameters to CSV to undo Box-Cox and scaling later ----
+    ## Getting the parameters to CSV to undo Box-Cox and scaling later ----
 
     params <- transformed[, lapply(.SD, function(x) {
         do.call("c", attributes(x))[c( # to ensure order consistency
@@ -203,60 +217,32 @@ cat("Box-Cox run time:", bc_time, "minutes\n")
 rm(signals)
 
 #==============================================================================#
-# Imputations
+# Imputation parameter estimates ----
 #==============================================================================#
 
 # Timing for the log
 start_i <- Sys.time()
 
-# Getting started on the imputations in parallel ====
-
-doParallel::registerDoParallel(cores = 28)
 imp_par <- foreach::"%dopar%"(foreach::foreach(i = as.character(yrmons)), {
 
     cat("Starting imputations for", i, "\n")
 
-    # Data prepping ----
+    ## Data prepping ----
 
     good <- names(checkMinObs(bctrans[[i]], min_obs = 2)) # Get cols we can use
     na_sort <- do.call("order", as.data.frame(-is.na(bctrans[[i]]))) #Sort by NA
     raw_i <- as.matrix(bctrans[[i]][na_sort, .SD, .SDcols = good]) # Final mat
 
-    # Intial mean and covariance matrix
-    E0 <- colMeans(raw_i, na.rm = T)
-    R0 <- cov(raw_i, use = "pairwise.complete.obs")
-    id <- diag(nrow = nrow(R0), ncol = ncol(R0))
+    # Initialize mean and cov matrix
+    #   enforce 0s on diagonal, as in the norm2 package
+    E0 = colMeans(raw_i, na.rm = T)
+    R0 = diag(diag(cov(raw_i, use = "pairwise.complete.obs"))) 
 
     # Error checking. Catch missing means and covariance
-    if (any(is.na(E0))) E0[which(is.na(E0))] <- 0
-    if (any(is.na(R0))) R0[is.na(R0)] <- id[is.na(R0)]
-
-    # Ensure covariance matrix is positive semi-definite ----
-
-    eig <- eigen(R0)
-    if (any(eig$values < 0)) {
-        j <- 1
-        while (any(eig$values < 0)) {
-            R0 <- structure(
-                (
-                    eig$vectors %*% 
-                    diag(ifelse(eig$values <= 0, 0, eig$values)) %*% 
-                    t(eig$vectors)
-                ),
-                dimnames = list(rownames(R0), colnames(R0))
-            )
-            eig <- eigen(R0)
-            if (j == 100) break
-        }
-        raw_i <- raw_i * matrix( # make it so data has same var as new cov mat
-            rep(sqrt(diag(R0)), nrow(raw_i)), 
-            byrow = T,
-            ncol = ncol(raw_i)
-        )
-    } 
+    if (any(is.na(E0))) stop(paste0('A signal has zero obs this month ', i))
+    if (any(is.na(R0))) stop(paste0('A signal has < 2 obs this month ', i))
 
     # Imputation algorithm ----
-
     em_out <- mvn_emf(raw_i, E0, R0, maxiter = opt$maxiter, tol = opt$tol,
         update_estE = FALSE)
 

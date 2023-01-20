@@ -1,6 +1,6 @@
 # (also downloads Chen-Zimmermann signals)
 #==============================================================================#
-# Packages ====
+# Packages and Setup ====
 #==============================================================================#
 
 library(data.table)
@@ -10,21 +10,25 @@ library(zoo)
 library(googledrive)
 library(tidyverse)
 
+dir.create('../data/', showWarnings = F)
+dir.create('../output/', showWarnings = F)
+
+# log in ----
+wrds_user <- getPass::getPass("WRDS username: ")
+wrds_pass <- getPass::getPass("WRDS pass: ")
+
+wrds <- DBI::dbConnect(RPostgres::Postgres(),
+                       host = "wrds-pgdata.wharton.upenn.edu",
+                       db = "wrds",
+                       port = 9737,
+                       user = wrds_user, 
+                       pass = wrds_pass)
+
 #==============================================================================#
 # Download CRSP ====
 #==============================================================================#
 
 ## Download size and returns ----
-
-wrds_user <- getPass::getPass("WRDS username: ")
-wrds_pass <- getPass::getPass("WRDS pass: ")
-
-wrds <- DBI::dbConnect(RPostgres::Postgres(),
-    host = "wrds-pgdata.wharton.upenn.edu",
-    db = "wrds",
-    port = 9737,
-    user = wrds_user, 
-    pass = wrds_pass)
 
 crspm <- as.data.table(DBI::dbGetQuery(wrds, "
     SELECT a.permno, a.date, a.ret, a.shrout, a.prc, 
@@ -39,8 +43,6 @@ crspm <- as.data.table(DBI::dbGetQuery(wrds, "
         ON a.permno=c.permno
         AND date_trunc('month', a.date) = date_trunc('month', c.dlstdt)
 ;"))
-
-DBI::dbDisconnect(wrds)
 
 ## Delisting returns ----
 
@@ -87,6 +89,27 @@ fwrite(crsp_final, "../data/crsp_data.csv")
 
 
 #==============================================================================#
+# Fama-French Factors ====
+#==============================================================================#
+
+# Fama-French factors
+ff5_mom <- as.data.table(dbGetQuery(wrds, "
+    SELECT date,
+        mktrf * 100 as mktrf, /* The PCR returns are in pct out of 100 */
+        smb * 100 as smb,
+        hml * 100 as hml,
+        rmw * 100 as rmw,
+        cma * 100 as cma,
+        umd * 100 as umd
+    FROM ff_all.fivefactors_monthly
+    ORDER BY date
+;"))
+
+DBI::dbDisconnect(wrds)
+
+fwrite(ff5_mom, "../data/ff5_factors.csv")
+
+#==============================================================================#
 # Download Chen-Zimmermann Data ====
 #==============================================================================#
 
@@ -123,4 +146,5 @@ target_dribble = pathRelease %>% drive_ls() %>%
   filter(name == 'PredictorPortsFull.csv')
 
 drive_download(target_dribble, path = '../data/PredictorPortsFull.csv', overwrite = T)
+
 

@@ -4,299 +4,180 @@
 #===============================================================================#
 
 library(data.table)
-library(dplyr)
 library(ggplot2)
 library(gridExtra)
 library(RPostgres)
 library(zoo)
+library(dplyr) 
+library(stringr)
+library(tidyr)
 source('functions.R')
 
 #===============================================================================#
 # Hardcodes ----
 #===============================================================================#
 
-out_path <- "../output/"
-data_dir <- paste0(out_path, "pcr_returns/")
+pc_ret_path <- '../output/pcr_returns/'
 
-yrmons <- gsub(
-  "[[:space:]]", "",
-  as.character(seq(as.yearmon("Jan 1995"), as.yearmon("Dec 2020"), by = 1/12))
-)
-
-# check 
-unique(fread(paste0(out_path, 'impute_ests/bcn_scale_Apr2000.csv'))$variable)
+plot_path <- '../output/plots/'
 
 #===============================================================================#
 # Pull in and format data ----
 #===============================================================================#
 
-# Each CSV is stored separately for a given month from different run of 2b_pcr.R
-pcr_em <- list()
-for (i in yrmons) {
-  ym <- as.yearmon(paste0(substr(i, 1, 3), " ", substr(i, 4, 7)))
-  tryCatch(
-    {pcr_em[[i]] <- fread(paste0(data_dir, "pcr_em_", i, ".csv"))[, yyyymm := ym]},
-    error = function(e) ""
-  )
+# ff factors
+ff5_mom <- fread('../data/ff5_factors.csv')
+
+# load up specs in pc_ret_path
+spec_dat <- data.table(dir = list.files(pc_ret_path))[, ":="(
+    forecast = str_split_fixed(dir, '_', 2)[,1],
+    imp = str_split_fixed(dir, '_', 2)[,2]
+)]
+ 
+# function for importing one spec
+import_ret_csv <- function(cur_spec) {
+  
+    list_csv_files <- list.files(path =paste0(pc_ret_path,cur_spec$dir), 
+        full.names = TRUE)
+    ret <- lapply(list_csv_files,
+        function(fname){
+            fname = as.vector(fname)
+            ym = str_replace(substr(fname, nchar(fname)-10, nchar(fname)-4), 
+                '_', '-')
+            ym = as.yearmon(ym)
+            ret = fread(fname)
+            ret$yyyymm = ym
+            ret$date = as.Date(ret$yyyymm)
+            ret
+        }
+    )
+    ret <- do.call(rbind, ret)
+    ret <- melt(ret,
+        id.vars = c('pc','n_signals','yyyymm','date'),
+        variable.name = 'weighting',
+        value.name = 'ls_ret'
+    )
+    ret$forecast <- cur_spec$forecast
+    ret$imp <- cur_spec$imp
+    return(ret)
 }
 
-# NEW: single iteration of EM runs
-pcr_em_1iter <- list()
-for (i in yrmons) {
-  ym <- as.yearmon(paste0(substr(i, 1, 3), " ", substr(i, 4, 7)))
-  tryCatch(
-    {pcr_em_1iter[[i]] <- fread(paste0(data_dir, "pcr_em_1iter_", i, ".csv"))[, yyyymm := ym]},
-    error = function(e) ""
-  )
-}
+# import all specs
+ret <- rbindlist(lapply(1:dim(spec_dat)[1], 
+    function(i) import_ret_csv(spec_dat[i, ]))) 
 
-pcr_mn <- list()
-for (i in yrmons) {
-  ym <- as.yearmon(paste0(substr(i, 1, 3), " ", substr(i, 4, 7)))
-  tryCatch(
-    {pcr_mn[[i]] <- fread(paste0(data_dir, "pcr_mn_", i, ".csv"))[, yyyymm := ym]},
-    error = function(e) ""
-  )
-}
-
-pcr_all <- rbind(
-    melt(rbindlist(pcr_em), 
-        id.vars = c("pc", "n_signals", "yyyymm"), 
-        variable.name = "weighting", value.name = "ls_ret")[, type := "EM Algo"],
-    melt(rbindlist(pcr_em_1iter), 
-        id.vars = c("pc", "n_signals", "yyyymm"), 
-        variable.name = "weighting", value.name = "ls_ret")[, type := "Available Case"],
-    melt(rbindlist(pcr_mn), 
-        id.vars = c("pc", "n_signals", "yyyymm"), 
-        variable.name = "weighting", value.name = "ls_ret")[, type := "Simple Mean"]
-)[,
-    date := as.Date(yyyymm)
+# cumulative returns
+ret[
+    order(forecast, imp, weighting, pc, yyyymm),
+    cumret := log(cumprod(1 + ifelse(is.na(ls_ret/100), 0, ls_ret/100))),
+    by = .(forecast, imp, weighting, pc)
 ]
-
-# Add in the cumulative returns
-pcr_all[
-  order(type, weighting, pc, yyyymm),
-  cumret := log(cumprod(1 + ifelse(is.na(ls_ret/100), 0, ls_ret/100))),
-  by = .(type, weighting, pc)
-]
-
-# Fama-French factors ----
-
-wrds_con <- dbConnect(Postgres(),
-    host = 'wrds-pgdata.wharton.upenn.edu',
-    port = 9737,
-    dbname = 'wrds')
-
-ff5_mom <- as.data.table(dbGetQuery(wrds_con, "
-    SELECT date, 
-        mktrf * 100 as mktrf, /* The PCR returns are in pct out of 100 */
-        smb * 100 as smb,
-        hml * 100 as hml,
-        rmw * 100 as rmw,
-        cma * 100 as cma,
-        umd * 100 as umd
-    FROM ff_all.fivefactors_monthly
-    ORDER BY date
-;"))
 
 #===============================================================================#
-# Regressions for alphas
+# Regressions for alphas ----
 #===============================================================================#
 
 # Merge data to align PC returns with FF5 factors
-reg_data <- merge(pcr_all, ff5_mom, by = 'date')
+# check timing -ac
+reg_data <- merge(ret, ff5_mom, by = 'date') %>% 
+    filter(!is.na(ls_ret), !is.na(mktrf))
 
-# Set the sequence of PCs to iterate through
-pcs <- seq(min(pcr_all$pc), max(pcr_all$pc))
-
-# FF5 + Mom regresions ----
-
-# Alphas from EM-based strategy
-alphas_em_ff5 <- melt(
-    rbindlist(lapply(pcs, function(x) {
-        dat = reg_data[pc == x & type == 'EM Algo']
-        alpha_ew <- lm('ls_ret ~ mktrf + smb + hml + rmw + cma + umd',
-            dat[weighting == 'ew_ls'])$coefficients['(Intercept)']
-        alpha_vw <- lm('ls_ret ~ mktrf + smb + hml + rmw + cma + umd', 
-            dat[weighting == 'vw_ls'])$coefficients['(Intercept)']
-        return(data.table(pc = x, Equal = alpha_ew, Value = alpha_vw))
-    })),
-    id = 'pc', value.name = 'alpha_ff5', variable.name = 'weighting'
-)[, ":="(type = 'EM Algo')]
-
-# Alphas from mean-based strategy
-alphas_mn_ff5 <- melt(
-    rbindlist(lapply(pcs, function(x) {
-        dat = reg_data[pc == x & type == 'Simple Mean']
-        alpha_ew <- lm('ls_ret ~ mktrf + smb + hml + rmw + cma + umd',
-            dat[weighting == 'ew_ls'])$coefficients['(Intercept)']
-        alpha_vw <- lm('ls_ret ~ mktrf + smb + hml + rmw + cma + umd', 
-            dat[weighting == 'vw_ls'])$coefficients['(Intercept)']
-        return(data.table(pc = x, Equal = alpha_ew, Value = alpha_vw))
-    })), 
-    id = 'pc', value.name = 'alpha_ff5', variable.name = 'weighting'
-)[, ":="(type = 'Simple Mean')]
-
-# Alphas from available case strategy
-alphas_avail_ff5 <- melt(
-    rbindlist(lapply(pcs, function(x) {
-        dat = reg_data[pc == x & type == 'Available Case']
-        alpha_ew <- lm('ls_ret ~ mktrf + smb + hml + rmw + cma + umd',
-            dat[weighting == 'ew_ls'])$coefficients['(Intercept)']
-        alpha_vw <- lm('ls_ret ~ mktrf + smb + hml + rmw + cma + umd', 
-            dat[weighting == 'vw_ls'])$coefficients['(Intercept)']
-        return(data.table(pc = x, Equal = alpha_ew, Value = alpha_vw))
-    })),
-    id = 'pc', value.name = 'alpha_ff5', variable.name = 'weighting'
-)[, ":="(type = 'Available Case')]
-
-# CAPM regressions ----
-
-# Alphas from EM-based strategy
-alphas_em_capm <- melt(
-    rbindlist(lapply(pcs, function(x) {
-        dat = reg_data[pc == x & type == 'EM Algo']
-        alpha_ew <- lm('ls_ret ~ mktrf',
-            dat[weighting == 'ew_ls'])$coefficients['(Intercept)']
-        alpha_vw <- lm('ls_ret ~ mktrf', 
-            dat[weighting == 'vw_ls'])$coefficients['(Intercept)']
-        return(data.table(pc = x, Equal = alpha_ew, Value = alpha_vw))
-    })), 
-    id = 'pc', value.name = 'alpha_capm', variable.name = 'weighting'
-)[, ":="(type = 'EM Algo')]
-
-# Alphas from mean-based strategy
-alphas_mn_capm <- melt(
-    rbindlist(lapply(pcs, function(x) {
-        dat = reg_data[pc == x & type == 'Simple Mean']
-        alpha_ew <- lm('ls_ret ~ mktrf',
-            dat[weighting == 'ew_ls'])$coefficients['(Intercept)']
-        alpha_vw <- lm('ls_ret ~ mktrf', 
-            dat[weighting == 'vw_ls'])$coefficients['(Intercept)']
-        return(data.table(pc = x, Equal = alpha_ew, Value = alpha_vw))
-    })), 
-    id = 'pc', value.name = 'alpha_capm', variable.name = 'weighting'
-)[, ":="(type = 'Simple Mean')]
-
-# Alphas from available case strategy
-alphas_avail_capm <- melt(
-    rbindlist(lapply(pcs, function(x) {
-        dat = reg_data[pc == x & type == 'Available Case']
-        alpha_ew <- lm('ls_ret ~ mktrf',
-            dat[weighting == 'ew_ls'])$coefficients['(Intercept)']
-        alpha_vw <- lm('ls_ret ~ mktrf', 
-            dat[weighting == 'vw_ls'])$coefficients['(Intercept)']
-        return(data.table(pc = x, Equal = alpha_ew, Value = alpha_vw))
-    })), 
-    id = 'pc', value.name = 'alpha_capm', variable.name = 'weighting'
-)[, ":="(type = 'Available Case')]
+sum_data <- reg_data[,
+    list(
+        rbar = summary(lm(ls_ret ~ 1))$coefficients['(Intercept)', 'Estimate']*12,
+        alpha_capm = summary(lm(ls_ret ~ mktrf))$coefficients['(Intercept)', 'Estimate']*12,
+        alpha_ff5 = summary(
+          lm(ls_ret ~ mktrf + smb + hml + rmw + cma + umd)
+        )$coefficients['(Intercept)', 'Estimate']*12,
+        sharpe = mean(ls_ret)/sd(ls_ret)*sqrt(12),
+        vol = sd(ls_ret)*sqrt(12)
+    ),
+    by = c('forecast', 'imp', 'pc', 'weighting')
+]
 
 #===============================================================================#
 # Plots
 #===============================================================================#
 
 # Aggregate plots ----
-scale_gg = 0.55
-Npc_max = 80 
+scale_gg <- 0.55
+Npc_max <- 80 
 
-# Combine all the data to get average returns and Sharpe ratio over time
-agg_data <- pcr_all[
-    pc <= Npc_max,
-    .( # Get as annualized mean return and std. dev.
-      ls_mn = mean(ls_ret, na.rm = T) * 12,
-      ls_sd = sd(ls_ret, na.rm = T) * sqrt(12)
-    ),
-    by = .(type, pc, weighting)
-][, ":="(
-    ls_sharpe = ls_mn / ls_sd,
-    weighting = dplyr::case_when(
-        weighting == "vw_ls" ~ "Value",
-        weighting == "ew_ls" ~ "Equal"
+fore_list <- unique(sum_data$forecast)
+
+for (cur_fore in fore_list) {
+  
+  # All the line plots will have same basic look
+    plot_base <- ggplot(sum_data[forecast == cur_fore], 
+            aes(x = pc, colour = weighting, linetype = imp)) + 
+        theme_bw() + 
+        theme(
+            legend.position = c(27, 85)/100,
+            legend.background = element_blank(),
+            legend.key = element_blank(),
+            legend.spacing.y = unit(0.01, 'cm'),
+            legend.spacing.x = unit(0.2, 'cm'),
+            legend.box = 'horizontal',
+            legend.key.size = unit(0.4, 'cm'),
+            legend.text = element_text(size = 8),
+            legend.title = element_text(size = 9)
+        ) + 
+        labs(
+          colour = "Stock Weights",
+          linetype = "Imputation",
+          x = "Number of PCs"
+        ) +
+        guides(
+          colour = guide_legend(order = 1), linetype = guide_legend(order = 2)
+        ) +
+        scale_linetype_manual(values = c('solid', 'longdash', 'dotted')) +
+        scale_size_manual(values = c(0.8, 0.8, 0.5)) +
+        scale_color_manual(values = c(MATRED, MATBLUE))
+  
+    # Specific plots
+    mn <- plot_base + geom_line(aes(y = rbar)) + 
+        ylab("Annualized Mean Return (%)")
+    stdev <- plot_base + geom_line(aes(y = vol)) +
+        ylab("Annualized Std. Dev. (%)") 
+    sharpe <- plot_base + geom_line(aes(y = sharpe)) + 
+        ylab("Annualized Sharpe Ratio") 
+    alpha_capm <- plot_base + geom_line(aes(y = alpha_capm)) +
+        ylab('Annualized CAPM Alpha (%)')
+    alpha_ff5 <- plot_base + geom_line(aes(y = alpha_ff5)) +
+        ylab('Annualized FF5 + Mom Alpha (%)')
+    
+    out_grid <- marrangeGrob(
+        grobs = list(mn, sd, sharpe),
+        ncol = 1, nrow = 3,
+        top = "LS returns (using deciles) from principal component regressions",
+        vp = grid::viewport(width = unit(5.5, "in"), height = unit(10, "in"))
     )
-)][ # Add in alphas
-    rbind(alphas_mn_capm, alphas_em_capm, alphas_avail_capm),
-    on = c('type', 'pc', 'weighting')
-][
-    rbind(alphas_mn_ff5, alphas_em_ff5, alphas_avail_ff5),
-    on = c('type', 'pc', 'weighting')
-][, ":="( # annualize alphas and order type as would be good in legend
-    alpha_capm = alpha_capm * 12,
-    alpha_ff5 = alpha_ff5 * 12,
-    type = factor(type, levels = c('EM Algo', 'Simple Mean', 'Available Case'))
-)]
-
-# All the line plots will have same basic look
-plot_base <- ggplot(agg_data, aes(x = pc, colour = weighting, linetype = type)) + 
-  theme_bw() + 
-  theme(
-    legend.position = c(27, 85)/100,
-    legend.background = element_blank(),
-    legend.key = element_blank(),
-    legend.spacing.y = unit(0.01, 'cm'),
-    legend.spacing.x = unit(0.1, 'cm'),
-    legend.box = 'horizontal',
-    legend.key.height = unit(0.4, 'cm'),
-    legend.key.width = unit(0.6, 'cm'),
-    legend.text = element_text(size = 8),
-    legend.title = element_text(size = 9)
-  ) + 
-  labs(
-    colour = "Stock Weights",
-    linetype = "Imputation",
-    x = "Number of PCs"
-  ) +
-  guides(
-    colour = guide_legend(order = 1), linetype = guide_legend(order = 2)
-  ) +
-  scale_linetype_manual(values = c('solid', 'longdash', 'dotted')) +
-  scale_size_manual(values = c(0.8, 0.8, 0.5)) +
-  scale_color_manual(values = c(MATRED, MATBLUE))
-
-# Specific plots
-mn <- plot_base + geom_line(aes(y = ls_mn)) + 
-    ylab("Annualized Mean Return (%)") +
-    ylim(0, 45)
-sd <- plot_base + geom_line(aes(y = ls_sd)) +
-    ylab("Annualized Std. Dev. (%)") 
-sharpe <- plot_base + geom_line(aes(y = ls_sharpe)) + 
-    ylab("Annualized Sharpe Ratio") 
-alpha_capm <- plot_base + geom_line(aes(y = alpha_capm)) +
-    ylab('Annualized CAPM Alpha (%)') +
-    ylim(0, 45)
-alpha_ff5 <- plot_base + geom_line(aes(y = alpha_ff5)) +
-    ylab('Annualized FF5 + Mom Alpha (%)') +
-    ylim(0, 45)
-
-out_grid <- marrangeGrob(
-  grobs = list(mn, sd, sharpe),
-  ncol = 1, nrow = 3,
-  top = "LS returns (using deciles) from principal component regressions",
-  vp = grid::viewport(width = unit(5.5, "in"), height = unit(10, "in"))
-)
-
-ggsave(plot = mn,
-    filename = paste0(out_path, "plots/pcr_expected_rets.pdf"),
-    width = 8, height = 5, unit = "in", scale = scale_gg)
-
-ggsave(plot = sharpe, 
-    filename = paste0(out_path, "plots/pcr_sharpes.pdf"),
-    width = 8, height = 5, unit = "in", scale = scale_gg)
-
-ggsave(plot = alpha_capm,
-    filename = paste0(out_path, "plots/pcr_alpha_capm.pdf"),
-    width = 8, height = 5, unit = "in", scale = scale_gg)
-
-ggsave(plot = alpha_ff5, 
-    filename = paste0(out_path, "plots/pcr_alpha_ff5_mom.pdf"),
-    width = 8, height = 5, unit = "in", scale = scale_gg)
+  
+    ggsave(plot = mn,
+        filename = paste0(plot_path, cur_fore, "_expected_rets.pdf"),
+        width = 8, height = 5, unit = "in", scale = scale_gg)
+  
+    ggsave(plot = sharpe, 
+        filename = paste0(plot_path, cur_fore, "_sharpes.pdf"),
+        width = 8, height = 5, unit = "in", scale = scale_gg)
+    
+    ggsave(plot = alpha_capm,
+        filename = paste0(plot_path, cur_fore, "_alpha_capm.pdf"),
+        width = 8, height = 5, unit = "in", scale = scale_gg)
+    
+    ggsave(plot = alpha_ff5, 
+        filename = paste0(plot_path, cur_fore, "_alpha_ff5_mom.pdf"),
+        width = 8, height = 5, unit = "in", scale = scale_gg)
+    
+}
 
 # Cumulative returns over time ----
 
 cumret_plot <- ggplot(
-    pcr_all[pc %in% c(2, 10, 25, 37)],
+    ret[pc %in% c(3, 5, max(ret$pc)) & forecast == 'pca'],
     aes(x = yyyymm, y = cumret)
   ) +
-  geom_line(aes(colour = factor(pc), linetype = paste0(weighting, ", ", type))) + 
+  geom_line(aes(colour = factor(pc), linetype = paste0(weighting, ", ", imp))) + 
   theme_bw() + 
   labs(
     x = "Month",
@@ -311,6 +192,11 @@ cumret_plot <- ggplot(
     legend.key = element_blank()
   )
 
-
-
-
+# check
+ret %>% 
+  group_by(weighting, forecast, imp, pc) %>% 
+  summarize(
+    rbar = mean(ls_ret)
+  ) %>% 
+  pivot_wider(names_from = 'forecast', values_from = 'rbar') %>% 
+  print(n=100)

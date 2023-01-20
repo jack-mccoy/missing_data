@@ -321,6 +321,8 @@ print(outputtable1,
       only.contents = TRUE,
       file = '../output/plots/final_list.tex')
 
+# for reference
+write.csv(final_list, '../output/plots/final_list.csv')
 
 ## long list ----
 final_list = signaldoc2 %>% 

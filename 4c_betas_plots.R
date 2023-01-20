@@ -19,7 +19,7 @@ ests_path <- paste0(data_path, "impute_ests/")
 plot_path <- paste0(data_path, "plots/")
 
 # input files
-data_file <- paste0(data_path, "bc_tmp.csv")
+data_file <- paste0(data_path, "/bcsignals/bcsignals_none.csv")
 
 # dates to get beta distributions for
 dates <- as.yearmon(c("Jun 1990", "Jun 2000", "Jun 2010"))
