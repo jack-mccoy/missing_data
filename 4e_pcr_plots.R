@@ -85,17 +85,17 @@ ret[
 reg_data <- merge(ret, ff5_mom, by = 'date') %>% 
   filter(!is.na(ls_ret), !is.na(mktrf))
 
-sum_data = reg_data[
-  , list(
-    rbar = summary(lm(ls_ret ~ 1))$coefficients['(Intercept)', 'Estimate']*12
-    , alpha_capm = summary(lm(ls_ret ~ mktrf))$coefficients['(Intercept)', 'Estimate']
-    , alpha_ff5 = summary(
-      lm(ls_ret ~ mktrf + smb + hml + rmw + cma + umd)
-    )$coefficients['(Intercept)', 'Estimate']
-    , sharpe = mean(ls_ret)/sd(ls_ret)*sqrt(12)
-    , vol = sd(ls_ret)*sqrt(12)
-  )
-  , by = c('forecast', 'imp', 'pc', 'weighting')
+sum_data <- reg_data[,
+    list(
+        rbar = summary(lm(ls_ret ~ 1))$coefficients['(Intercept)', 'Estimate']*12,
+        alpha_capm = summary(lm(ls_ret ~ mktrf))$coefficients['(Intercept)', 'Estimate']*12,
+        alpha_ff5 = summary(
+          lm(ls_ret ~ mktrf + smb + hml + rmw + cma + umd)
+        )$coefficients['(Intercept)', 'Estimate']*12,
+        sharpe = mean(ls_ret)/sd(ls_ret)*sqrt(12),
+        vol = sd(ls_ret)*sqrt(12)
+    ),
+    by = c('forecast', 'imp', 'pc', 'weighting')
 ]
 
 #===============================================================================#
@@ -194,10 +194,6 @@ cumret_plot <- ggplot(
     legend.background = element_blank(),
     legend.key = element_blank()
   )
-
-
-
-
 
 # check
 ret %>% 

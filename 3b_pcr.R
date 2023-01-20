@@ -149,36 +149,42 @@ signals[, time_avail_m := yyyymm + 1/12]
 
 if (opt$scaled_pca){
   
-  # set up weights
-  if (opt$scaled_pca_weight == 'ew'){
-    signals$tempw = 1
-  } else if (opt$scaled_pca_weight == 'vw') {
-    signals$tempw = signals$me
-  } else {
-    stop('opt$scaled_pca_weight invalid')
-  }
-  
-  # regress bh1m on each signal, dropping current month's bh1m
-  temp = lapply(
-    opt$signals_keep
-    , function(signalname){
-      summary(lm(
-        paste0('bh1m ~ ', signalname), signals[time_avail_m < pred_mon]
-        , weights = tempw
-      ))$coefficients[signalname, 'Estimate']
+    # set up weights
+    if (opt$scaled_pca_weight == 'ew'){
+      signals$tempw = 1
+    } else if (opt$scaled_pca_weight == 'vw') {
+      signals$tempw = signals$me
+    } else {
+      stop('opt$scaled_pca_weight invalid')
     }
-  )
-  slopedat = data.table(
-    signalname = opt$signals_keep, slope = as.numeric(temp)
-  )
-  
-  # re-scale with slope
-  slopemat = matrix(1, dim(signals)[1], 1) %*% t(as.matrix(slopedat$slope))
-  
-  signals = cbind(
-    signals[ , .SD, .SDcols = opt$signals_keep ] * slopemat
-    , signals[ , .SD, .SDcols = !opt$signals_keep] 
-  )
+    
+    # regress bh1m on each signal, dropping current month's bh1m
+    temp = lapply(
+      opt$signals_keep
+      , function(signalname){
+        summary(lm(
+          paste0('bh1m ~ ', signalname), signals[time_avail_m < pred_mon]
+          , weights = tempw
+        ))$coefficients[signalname, 'Estimate']
+      }
+    )
+    slopedat = data.table(
+      signalname = opt$signals_keep,
+      slope = as.numeric(temp)
+    )
+    
+    # re-scale with slope
+    slopemat = matrix(1, dim(signals)[1], 1) %*% t(as.matrix(slopedat$slope))
+    
+    signals = cbind(
+      signals[ , .SD, .SDcols = opt$signals_keep] * slopemat,
+      signals[ , .SD, .SDcols = !opt$signals_keep] 
+    )
+    pc <- prcomp(signals[, .SD, .SDcols = opt$signals_keep], 
+        center = FALSE, scale = FALSE)
+} else {
+    pc <- prcomp(signals[, .SD, .SDcols = opt$signals_keep], 
+        center = TRUE, scale = TRUE)
 }
 
 #==============================================================================# 
@@ -186,8 +192,6 @@ if (opt$scaled_pca){
 #==============================================================================#
 
 # Get principal components and form regression data
-pc <- prcomp(signals[, .SD, .SDcols = opt$signals_keep], 
-    center = FALSE, scale = FALSE)
 reg_data <- data.table(signals[, .(permno, time_avail_m, bh1m, me)], pc$x)
 
 # Max number of PCs we want to run
