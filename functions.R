@@ -298,3 +298,30 @@ chen_theme =   theme_minimal() +
     legend.title = element_blank()    
   ) 
 
+imputeLastVal <- function(x, yrmons, k = 12) {
+    if (length(x) != length(yrmons)) {
+        stop('`x` and `yrmons` must have same length\n')
+    }
+    if (length(x) == 1) {
+        return(x)
+    } else {
+        if (any((yrmons - shift(yrmons))[2:length(yrmons)] <= 0)) {
+            stop('`yrmons` must be strictly increasing\n')
+        }
+        y <- x
+        for (i in 1:length(x)) {
+            if (is.na(y[i])) {
+                x_prev <- x[which(
+                    ((yrmons[i] - k * (1/12)) < yrmons) &
+                    (yrmons < yrmons[i])
+                )]
+                if (any(!is.na(x_prev))) {
+                    non_nas <- x_prev[which(!is.na(x_prev))]
+                    y[i] <- last(non_nas)
+                }
+            }
+        }
+        return(y)
+    }
+}
+

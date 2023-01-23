@@ -130,8 +130,8 @@ for (cur_fore in fore_list) {
         guides(
           colour = guide_legend(order = 1), linetype = guide_legend(order = 2)
         ) +
-        scale_linetype_manual(values = c('solid', 'longdash', 'dotted')) +
-        scale_size_manual(values = c(0.8, 0.8, 0.5)) +
+        #scale_linetype_manual(values = c('solid', 'longdash', 'dotted')) +
+        #scale_size_manual(values = c(0.8, 0.8, 0.5)) +
         scale_color_manual(values = c(MATRED, MATBLUE))
   
     # Specific plots
@@ -145,13 +145,6 @@ for (cur_fore in fore_list) {
         ylab('Annualized CAPM Alpha (%)')
     alpha_ff5 <- plot_base + geom_line(aes(y = alpha_ff5)) +
         ylab('Annualized FF5 + Mom Alpha (%)')
-    
-    out_grid <- marrangeGrob(
-        grobs = list(mn, sd, sharpe),
-        ncol = 1, nrow = 3,
-        top = "LS returns (using deciles) from principal component regressions",
-        vp = grid::viewport(width = unit(5.5, "in"), height = unit(10, "in"))
-    )
   
     ggsave(plot = mn,
         filename = paste0(plot_path, cur_fore, "_expected_rets.pdf"),

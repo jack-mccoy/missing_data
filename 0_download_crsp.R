@@ -18,11 +18,11 @@ wrds_user <- getPass::getPass("WRDS username: ")
 wrds_pass <- getPass::getPass("WRDS pass: ")
 
 wrds <- DBI::dbConnect(RPostgres::Postgres(),
-                       host = "wrds-pgdata.wharton.upenn.edu",
-                       db = "wrds",
-                       port = 9737,
-                       user = wrds_user, 
-                       pass = wrds_pass)
+    host = "wrds-pgdata.wharton.upenn.edu",
+    db = "wrds",
+    port = 9737,
+    user = wrds_user, 
+    pass = wrds_pass)
 
 #==============================================================================#
 # Download CRSP ====
@@ -31,7 +31,7 @@ wrds <- DBI::dbConnect(RPostgres::Postgres(),
 ## Download size and returns ----
 
 crspm <- as.data.table(DBI::dbGetQuery(wrds, "
-    SELECT a.permno, a.date, a.ret, a.shrout, a.prc, 
+    SELECT a.permno, a.date, a.ret, a.shrout, a.prc, a.hsiccd, 
         b.exchcd,
         c.dlstcd, c.dlret   -- from delistings table
     FROM crsp.msf AS a
@@ -47,46 +47,45 @@ crspm <- as.data.table(DBI::dbGetQuery(wrds, "
 ## Delisting returns ----
 
 crspm[, # Adapted from Andrew's github code
-      dlret := dplyr::case_when(
+    dlret := dplyr::case_when(
         is.na(dlret) 
-        & (dlstcd == 500 | (520 <= dlstcd & dlstcd <= 584))
-        & (exchcd == 1 | exchcd == 2) 
-        ~ -0.25,
+            & (dlstcd == 500 | (520 <= dlstcd & dlstcd <= 584))
+            & (exchcd == 1 | exchcd == 2) 
+            ~ -0.25,
         is.na(dlret)
-        & (dlstcd == 500 | (dlstcd >=520 & dlstcd <=584))
-        & (exchcd == 3)
-        ~ -0.55,
+            & (dlstcd == 500 | (dlstcd >=520 & dlstcd <=584))
+            & (exchcd == 3)
+            ~ -0.55,
         dlret < -1 & !is.na(dlret) ~ -1,
         TRUE ~ 0
-      )
+    )
 ][ # return is the return plus delisting return
-  , ret := ret + dlret
+    , ret := ret + dlret
 ][ # in cases where no ret but non-zero dlret
-  is.na(ret) & dlret != 0,
-  ret := dlret
+    is.na(ret) & dlret != 0,
+    ret := dlret
 ]
 
-## Lastly, the signals that aren't in Andrew's master file ----
+# Lastly, the signals that aren't in Andrew's master file ----
 # Signals are SIGNED (higher signal ==> higher return)
 
 crsp_final <- crspm[, .(
-  permno,
-  yyyymm = as.yearmon(as.Date(date)),
-  ret = 100 * ret,
-  me = abs(prc) * shrout,
-  price = -1 * log(abs(prc))
+    permno,
+    hsiccd,
+    yyyymm = as.yearmon(as.Date(date)),
+    ret = 100 * ret,
+    me = abs(prc) * shrout,
+    price = -1 * log(abs(prc))
 )][, ":="(
-  streversal = -1 * ifelse(is.na(ret), 0, ret),
-  size = ifelse(me > 0, -1 * log(me), NA)
+    streversal = -1 * ifelse(is.na(ret), 0, ret),
+    size = ifelse(me > 0, -1 * log(me), NA)
 )]
 
 # Memory
 rm(crspm)
 
-
-## Output ----
+# Output ----
 fwrite(crsp_final, "../data/crsp_data.csv")
-
 
 #==============================================================================#
 # Fama-French Factors ====
@@ -146,5 +145,4 @@ target_dribble = pathRelease %>% drive_ls() %>%
   filter(name == 'PredictorPortsFull.csv')
 
 drive_download(target_dribble, path = '../data/PredictorPortsFull.csv', overwrite = T)
-
 
