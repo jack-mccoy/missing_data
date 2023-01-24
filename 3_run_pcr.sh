@@ -128,7 +128,7 @@ for _yr in $(eval echo "{$start_yr..$end_yr}"); do
             elif [ $forecast = "spca1" ]; then
                 scaled_pca="TRUE"
                 scaled_pca_weight="ew"
-            elif [ $forecast = "spca1" ]; then
+            elif [ $forecast = "spca2" ]; then
                 scaled_pca="TRUE"
                 scaled_pca_weight="vw"
             fi
