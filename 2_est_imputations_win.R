@@ -1,8 +1,6 @@
 # Run imputations on windows
 #   I guess a bat or powershell script would be a bit nicer but I know how to do this - ac
 
-# 1985 causes errors?
-
 for (year_cur in 1985:2020){
   
   runme = paste0(
