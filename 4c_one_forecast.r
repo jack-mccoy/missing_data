@@ -3,7 +3,7 @@
 #==============================================================================#
 # Setup ----
 #==============================================================================#
-rm(list = ls())
+# rm(list = ls())
 library(ranger)
 library(data.table)
 library(tidyverse)
@@ -21,7 +21,7 @@ opt = list(
   , insamp_months = 12*10 # months
   , yearm_end = '2020-12'
   , cores_frac = 0.5
-  , model = 'keras' # 'ranger' or 'lm' or 'keras'
+  , model = 'lm' # 'ranger' or 'lm' or 'keras'
 )
 
 # output names
@@ -35,7 +35,7 @@ optranger = list(
 )
 
 optkeras = list(
-  lambda1 = 1e-3, epochs = 100, batch_size = 10000, learning_rate = 0.001, patience = 5
+  lambda1 = 1e-3, epochs = 20, batch_size = 10000, learning_rate = 0.001, patience = 5
 )
 
 # keep this subset for testing, use NULL for keep all
@@ -58,56 +58,54 @@ dir.create(paste0(outroot,outfolder), showWarnings = F)
 # Data pull ----
 #==============================================================================#
 
-# Read in data 
-dat <- fread(opt$data_file)
-setnames(dat, colnames(dat), tolower(colnames(dat))) # ensure lower
-dat[, yyyymm := as.yearmon(yyyymm)]
-
-# bcsignals_none.csv seems to have crsp info stuff that we should remove
-dat[ , ':=' (me = NULL)]
-
-crsp_data <- fread("../data/crsp_data.csv")[, .(permno, yyyymm, me, ret)] 
-crsp_data[ , yyyymm := as.yearmon(yyyymm)]
-
-# split crsp into known and unknown
-crsp_info = crsp_data %>% select(permno, yyyymm, me)
-crsp_bh1m = crsp_data %>% select(permno, yyyymm, ret) %>% 
-  mutate(yyyymm := yyyymm - 1/12) %>% 
-  rename(bh1m = ret)
-
-dat <- merge(dat, crsp_info, by = c("permno", "yyyymm"), all.x = T)
-dat <- merge(crsp_bh1m, dat, by = c("permno", "yyyymm"), all.x = T)
-
-# Memory
-rm(crsp_data, crsp_info, crsp_bh1m)
-
-# Simple mean imputations. Shouldn't matter for EM-imputed data
-# Easiest to just catch it all here for non-imputed data
-# should be a cleaner way to do this
-signals_list = names(dat) %>% setdiff(c('permno','yyyymm','sic3','me','bh1m'))
-
-# subset to select ones for debugging
-if (!is.null(signals_keep)){
-  signals_list = intersect(signals_keep, signals_list)
+if (F) {# Read in data 
+  dat <- fread(opt$data_file)
+  setnames(dat, colnames(dat), tolower(colnames(dat))) # ensure lower
+  dat[, yyyymm := as.yearmon(yyyymm)]
+  
+  # bcsignals_none.csv seems to have crsp info stuff that we should remove
+  dat[ , ':=' (me = NULL)]
+  
+  crsp_data <- fread("../data/crsp_data.csv")[, .(permno, yyyymm, me, ret)] 
+  crsp_data[ , yyyymm := as.yearmon(yyyymm)]
+  
+  # split crsp into known and unknown
+  crsp_info = crsp_data %>% select(permno, yyyymm, me)
+  crsp_bh1m = crsp_data %>% select(permno, yyyymm, ret) %>% 
+    mutate(yyyymm := yyyymm - 1/12) %>% 
+    rename(bh1m = ret)
+  
+  dat <- merge(dat, crsp_info, by = c("permno", "yyyymm"), all.x = T)
+  dat <- merge(crsp_bh1m, dat, by = c("permno", "yyyymm"), all.x = T)
+  
+  # Memory
+  rm(crsp_data, crsp_info, crsp_bh1m)
+  
+  # Simple mean imputations. Shouldn't matter for EM-imputed data
+  # Easiest to just catch it all here for non-imputed data
+  # should be a cleaner way to do this
+  signals_list = names(dat) %>% setdiff(c('permno','yyyymm','sic3','me','bh1m'))
+  
+  # subset to select ones for debugging
+  if (!is.null(signals_keep)){
+    signals_list = intersect(signals_keep, signals_list)
+  }
+  
+  imputeVec <- function(x, na.rm = T) {
+    x[is.na(x)] <- mean(x, na.rm = na.rm)
+    return(x)
+  }
+  dat[,
+      (signals_list) := lapply(.SD, imputeVec, na.rm = T),
+      .SDcols = signals_list,
+      by = .(yyyymm)
+  ]
+  
+  # keep only complete cases
+  dat <- dat[complete.cases(
+    dat[, .SD, .SDcols = c("permno", "yyyymm", "bh1m", "me", signals_list)]
+  )]
 }
-
-imputeVec <- function(x, na.rm = T) {
-  x[is.na(x)] <- mean(x, na.rm = na.rm)
-  return(x)
-}
-dat[,
-        (signals_list) := lapply(.SD, imputeVec, na.rm = T),
-        .SDcols = signals_list,
-        by = .(yyyymm)
-]
-
-# keep only complete cases
-dat <- dat[complete.cases(
-  dat[, .SD, .SDcols = c("permno", "yyyymm", "bh1m", "me", signals_list)]
-)]
-
-
-
 
 
 #==============================================================================# 
@@ -115,7 +113,12 @@ dat <- dat[complete.cases(
 #==============================================================================#
 
 # function for choosing forecast
-fit_and_forecast = function(modelname){
+fit_and_forecast = function(modelname, fit_start, fit_end, fcast_start, fcast_end){
+  
+  # create subsamples
+  insamp = dat[yyyymm >=  fit_start & yyyymm <= fit_end]
+  oos  = dat[yyyymm >=  fcast_start & yyyymm <= fcast_end]  
+  
   if (modelname == 'lm'){
     form = paste0('bh1m ~ ', paste(signals_list, collapse = '+'))  
     fit = lm(form, data=insamp)
@@ -136,14 +139,8 @@ fit_and_forecast = function(modelname){
     
   } else if (modelname == 'keras') {
     
-    # create norm layer, fit the state of layer to data
-    #   seems to be necessary, or something like it that uses adapt
-    normalizer <- layer_normalization(axis = -1L)
-    normalizer %>% adapt(as.matrix(insamp %>% select(all_of(signals_list))))
-    
     # build model
     keras_model = keras_model_sequential() %>% 
-      normalizer() %>% 
       layer_dense(32, activation = 'relu'
                   , kernel_regularizer = regularizer_l1(optkeras$lambda1)) %>%
       # layer_dense(64, activation = 'relu') %>%
@@ -157,22 +154,26 @@ fit_and_forecast = function(modelname){
     )
     
     # fit
-    # ref: https://tensorflow.rstudio.com/guides/keras/basics.html#callbacks
     history <- keras_model %>% fit(
       as.matrix(insamp %>% select(all_of(signals_list))),
       as.matrix(insamp %>% select(bh1m)),
       verbose = 1,
       epochs = optkeras$epochs,
       batch_size = optkeras$batch_size,
-      callbacks = callback_early_stopping(patience = optkeras$patience)
+      callbacks = callback_early_stopping(
+        patience = optkeras$patience, monitor = 'loss'
+      )
     )
     
     Ebh1m = predict(keras_model, as.matrix(oos %>% select(all_of(signals_list))))
     
   }
   
+  # output data.table
+  oos_small = copy(oos[,.(permno,yyyymm,bh1m)])
+  oos_small[, Ebh1m := Ebh1m]
   
-  return(Ebh1m)
+  return(oos_small)
 }  
 
 
@@ -202,26 +203,23 @@ for (fi in 1:dim(sample_list)[1]){
   
   print(paste0('forecasting in ', fcur$insamp_end))  
   
-  # create subsamples
-  insamp = dat[yyyymm >= fcur$insamp_begin & yyyymm <= fcur$insamp_end]
-  oos  = dat[yyyymm >= fcur$oos_begin & yyyymm <= fcur$oos_end]
-  
   # fit and forecast
-  Ebh1m = fit_and_forecast(opt$model)
+  ooscur = fit_and_forecast(opt$model
+                           , fcur$insamp_begin, fcur$insamp_end
+                           , fcur$oos_begin, fcur$oos_end
+                           )
   
   # save
-  outlist[[fi]] = oos[,.(permno,yyyymm)][
-    , Ebh1m := Ebh1m
-  ]
+  outlist[[fi]] = ooscur
   
   # feedback for sanity
   min_elapsed = round(as.numeric(Sys.time() - tic, units = 'mins'), 1)
   log.text <- paste0(
-    Sys.time()
+    "ETA = ", round(min_elapsed / fi * (dim(sample_list)[1]-fi+1), 1), " min"
     , " insamp_end = ", fcur$insamp_end
     , " min elapsed = ", min_elapsed
     , " min per fit = ", round(min_elapsed / fi, 2)
-    , " min remaining = ", round(min_elapsed / fi * (dim(sample_list)[1]-fi+1), 1)
+    , " datetime = ", Sys.time()
   )
   write.table(log.text, paste0(outroot,outfolder, '/forecast-loop.log')
               , append = TRUE, row.names = FALSE, col.names = FALSE)
