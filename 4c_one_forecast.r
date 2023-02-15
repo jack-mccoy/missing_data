@@ -3,7 +3,7 @@
 #==============================================================================#
 # Setup ----
 #==============================================================================#
-# rm(list = ls())
+rm(list = ls())
 library(ranger)
 library(data.table)
 library(tidyverse)
@@ -14,14 +14,17 @@ library(janitor)
 library(tensorflow)
 library(keras)
 
+# model independent options
 opt = list(
   data_file = '../output/bcsignals/bcsignals_none.csv'
   , yearm_begin = '1995-06'
   , refit_period = 12 # months
-  , insamp_months = 12*10 # months
+  , insamp_months = 12*10 
   , yearm_end = '2020-12'
   , cores_frac = 0.5
-  , model = 'lm' # 'ranger' or 'lm' or 'keras'
+  , model = 'keras' # 'ranger' or 'lm' or 'keras'
+  , validate_months = 12*2
+  , verbose = 1
 )
 
 # output names
@@ -31,34 +34,35 @@ outroot = '../output/forecast/'
 # settings for specific algos
 # max.depth = NULL dramatically slows things down
 optranger = list( 
-  num.tree = 500, max.depth = 3, mtry = 30
+  num.tree = 300, max.depth = c(3,6,9), mtry = c(15,30,60)
 )
 
+# optkeras = list(
+#   lambda1 = c(1e-5, 1e-3)
+#   , learning_rate = c(0.001, 0.01)
+#   , batch_size = 10000, epochs = 100, patience = 5, ensemble_num = 10
+# )
+
+# test settings
 optkeras = list(
-  lambda1 = 1e-3, epochs = 20, batch_size = 10000, learning_rate = 0.001, patience = 5
+  lambda1 = c(1e-3)
+  , learning_rate = c(0.001)
+  , batch_size = 10000, epochs = 100, patience = 5, ensemble_num = 1
+)
+
+optlm = list(
+  blank = NA_real_
 )
 
 # keep this subset for testing, use NULL for keep all
 signals_keep = NULL # e.g. c('size','bm','mom12m')
-
-# auto setup
-if (is.null(customname)) {
-  outfolder = paste(
-    str_remove(basename(opt$data_file), '.csv')
-    , opt$model, sep = '-'
-  )
-} else {
-  outfolder = customname
-}
-dir.create(paste0(outroot), showWarnings = F)
-dir.create(paste0(outroot,outfolder), showWarnings = F)
 
 
 #==============================================================================#
 # Data pull ----
 #==============================================================================#
 
-if (F) {# Read in data 
+if (T) {# Read in data 
   dat <- fread(opt$data_file)
   setnames(dat, colnames(dat), tolower(colnames(dat))) # ensure lower
   dat[, yyyymm := as.yearmon(yyyymm)]
@@ -108,12 +112,87 @@ if (F) {# Read in data
 }
 
 
+#==============================================================================#
+# Auto Setup ----
+#==============================================================================#
+# uses info from data pull, so is after data pull
+
+# trying to increase cpu usage of keras, but 
+# this doesn't work 
+# https://github.com/rstudio/keras/issues/562
+# config <- tf$ConfigProto(intra_op_parallelism_threads = 2L,
+#                          inter_op_parallelism_threads = 2L)
+# session = tf$Session(config = config)
+# k_set_session(session)
+
+
+# create optmodel and make list of tuning settings
+evalme = paste0('optmodel = opt', opt$model) 
+eval(parse(text = evalme))
+tuneset = optmodel %>% expand.grid() %>% arrange(across(everything()))
+
+
+# replace null options with defaults
+if (is.null(optmodel$ensemble_num)){
+  optmodel$ensemble_num = 1
+}
+
+# create folder
+if (is.null(customname)) {
+  outfolder = paste(
+    str_remove(basename(opt$data_file), '.csv')
+    , opt$model, sep = '-'
+  )
+} else {
+  outfolder = customname
+}
+dir.create(paste0(outroot), showWarnings = F)
+dir.create(paste0(outroot,outfolder), showWarnings = F)
+
+# save settings (make sure you're running the right thing!)
+sink(paste0(outroot,outfolder,'/settings.txt'))
+print('================================')
+print('opt')
+format(opt)
+cat('\n\n')
+
+print('================================')
+print('optmodel')
+format(optmodel)
+cat('\n\n')
+
+
+print('================================')
+print('signals_used')
+as.data.frame(signals_list)
+cat('\n\n')
+
+sink()
+
+# print settings (make sure you're running the right thing!)
+print('================================')
+print('opt')
+format(opt)
+cat('\n\n')
+
+print('================================')
+print('optmodel')
+format(optmodel)
+cat('\n\n')
+
+
+print('================================')
+print('signals_used')
+print(signals_list)
+
+
+
 #==============================================================================# 
 # fit_and_forecast function ----
 #==============================================================================#
 
 # function for choosing forecast
-fit_and_forecast = function(modelname, fit_start, fit_end, fcast_start, fcast_end){
+fit_and_forecast = function(modelname, hyperpar, fit_start, fit_end, fcast_start, fcast_end, seed = NULL){
   
   # create subsamples
   insamp = dat[yyyymm >=  fit_start & yyyymm <= fit_end]
@@ -128,10 +207,10 @@ fit_and_forecast = function(modelname, fit_start, fit_end, fcast_start, fcast_en
     
     fit = ranger(x = as.matrix(insamp %>% select(all_of(signals_list)))
                  , y = as.matrix(insamp %>% select(bh1m))
-                 , num.trees = optranger$num.tree
+                 , num.trees = hyperpar$num.tree
                  , num.threads = floor(parallel::detectCores()*opt$cores_frac)
-                 , max.depth = optranger$max.depth
-                 , mtry = optranger$mtry
+                 , max.depth = hyperpar$max.depth
+                 , mtry = hyperpar$mtry
     )
     
     pred.ra = predict(fit, oos) 
@@ -140,32 +219,49 @@ fit_and_forecast = function(modelname, fit_start, fit_end, fcast_start, fcast_en
   } else if (modelname == 'keras') {
     
     # build model
-    keras_model = keras_model_sequential() %>% 
+    #   Gu Kelly Xiu's NN4 (page 22)
+    keras_model = keras_model_sequential() %>%
       layer_dense(32, activation = 'relu'
-                  , kernel_regularizer = regularizer_l1(optkeras$lambda1)) %>%
-      # layer_dense(64, activation = 'relu') %>%
+                  , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
+      # layer_dense(16, activation = 'relu'
+      #             , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
+      # layer_dense(8, activation = 'relu'
+      #             , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
+      # layer_dense(4, activation = 'relu'
+      #             , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
       layer_dense(1)
+    
     
     keras_model %>%  compile(
       loss = 'mean_squared_error',
       optimizer = optimizer_adam(
-        learning_rate = optkeras$learning_rate
+        learning_rate = hyperpar$learning_rate
       )
     )
     
     # fit
+    if (!is.null(seed)){
+      tensorflow::set_random_seed(seed)
+    }
     history <- keras_model %>% fit(
       as.matrix(insamp %>% select(all_of(signals_list))),
       as.matrix(insamp %>% select(bh1m)),
-      verbose = 1,
-      epochs = optkeras$epochs,
-      batch_size = optkeras$batch_size,
+      verbose = opt$verbose,
+      epochs = hyperpar$epochs,
+      batch_size = hyperpar$batch_size,
       callbacks = callback_early_stopping(
-        patience = optkeras$patience, monitor = 'loss'
+        patience = hyperpar$patience, monitor = 'val_loss'
+      ),
+      validation_data = list(
+        as.matrix(oos %>% select(all_of(signals_list))),
+        as.matrix(oos %>% select(bh1m))
       )
     )
     
-    Ebh1m = predict(keras_model, as.matrix(oos %>% select(all_of(signals_list))))
+    Ebh1m = predict(
+      keras_model, as.matrix(oos %>% select(all_of(signals_list)))
+      , verbose = opt$verbose
+    )
     
   }
   
@@ -179,10 +275,10 @@ fit_and_forecast = function(modelname, fit_start, fit_end, fcast_start, fcast_en
 
 
 #==============================================================================# 
-# Loop over sample periods ----
+# Loop over sample sets ----
 #==============================================================================#
 
-# create list of forecast periods
+# create list of sample sets
 sample_list = data.frame(
   insamp_end = seq(as.yearmon(opt$yearm_begin), as.yearmon(opt$yearm_end), opt$refit_period/12)
 ) %>% 
@@ -190,53 +286,102 @@ sample_list = data.frame(
     insamp_begin = insamp_end - opt$insamp_months/12
     , oos_begin = insamp_end + 1/12
     , oos_end = lead(insamp_end) - 1/12
+    , tune_split = insamp_end - opt$validate_months/12
   ) %>% 
-  filter(row_number() < n()) # don't oos after opt$yearm_end
+  filter(row_number() < n()) %>%  # don't oos after opt$yearm_end
+  select(insamp_begin, tune_split, everything())
 
 
 # loop
 tic = Sys.time()
 outlist = list()
+tunelist = list()
 file.remove(paste0(outroot,outfolder,'/forecast-loop.log'))
-for (fi in 1:dim(sample_list)[1]){
-  fcur = sample_list[fi, ]
+for (sampi in 1:dim(sample_list)[1]){
+  sampcur = sample_list[sampi, ]
   
-  print(paste0('forecasting in ', fcur$insamp_end))  
+  print(paste0('forecasting in ', sampcur$insamp_end))  
   
-  # fit and forecast
-  ooscur = fit_and_forecast(opt$model
-                           , fcur$insamp_begin, fcur$insamp_end
-                           , fcur$oos_begin, fcur$oos_end
-                           )
+  # tune hyperparbest (or not)
+  if (dim(tuneset)[1] > 1){
+    tunesum = tibble()
+    for (seti in 1:dim(tuneset)[1]){
+      
+      print(paste('tuning set', seti, 'of', dim(tuneset)[1], sep = ' '))
+      
+      # fit before split, forecast after split
+      oostemp = fit_and_forecast(opt$model, tuneset[seti,]
+                                 , sampcur$insamp_begin, sampcur$tune_split
+                                 , sampcur$tune_split+1/12, sampcur$insamp_end)
+      
+      sumtemp = tuneset[seti,] %>% cbind(
+        oostemp %>% summarize(rmse = sqrt(mean((bh1m-Ebh1m)^2))) 
+      )
+      
+      tunesum = rbind(tunesum, sumtemp)
+    }
+    
+    tunesum = tunesum %>% 
+      mutate(best = rmse == min(rmse)) %>% 
+      arrange(rmse) 
+      
+    hyperparbest = tunesum %>% filter(best)
+    
+  } else {
+    # no tuning requested
+    tunesum = tuneset %>% mutate(rmse = NA_real_, best = TRUE)
+    hyperparbest = tuneset
+    
+  }
+  
+  # fit and forecast full in-samp with hyperparbest + ensembling
+  oos_ensemb = list()
+  for (ensembi in 1:optmodel$ensemble_num){
+    print(paste('ensemble', ensembi, 'of', optmodel$ensemble_num, sep = ' '))
+    seed = 316*ensembi
+    oos_ensemb[[ensembi]] = fit_and_forecast(opt$model, hyperparbest
+                              , sampcur$insamp_begin, sampcur$insamp_end
+                              , sampcur$oos_begin, sampcur$oos_end
+                              , seed)  
+    oos_ensemb[[ensembi]]$seed = seed
+  }
+  oos_ensemb = rbindlist(oos_ensemb)
+  ooscur = oos_ensemb[
+    , .(Ebh1m = mean(Ebh1m), bh1m = mean(bh1m)), by = c('permno','yyyymm')
+  ]
+  
   
   # save
-  outlist[[fi]] = ooscur
+  outlist[[sampi]] = ooscur
+  tunelist[[sampi]] = tunesum %>% mutate(
+    oos_begin = sampcur$oos_begin
+  )
   
-  # feedback for sanity
+  # feedback 
   min_elapsed = round(as.numeric(Sys.time() - tic, units = 'mins'), 1)
   log.text <- paste0(
-    "ETA = ", round(min_elapsed / fi * (dim(sample_list)[1]-fi+1), 1), " min"
-    , " insamp_end = ", fcur$insamp_end
+    "ETA = ", round(min_elapsed / sampi * (dim(sample_list)[1]-sampi+1), 1), " min"
+    , " min per fit = ", round(min_elapsed / sampi, 2)    
+    , " insamp_end = ", sampcur$insamp_end
     , " min elapsed = ", min_elapsed
-    , " min per fit = ", round(min_elapsed / fi, 2)
     , " datetime = ", Sys.time()
   )
   write.table(log.text, paste0(outroot,outfolder, '/forecast-loop.log')
               , append = TRUE, row.names = FALSE, col.names = FALSE)
+  print(tunesum)
+
 }
 
 # bind output
 forecast = rbindlist(outlist)
+tuneresult = rbindlist(tunelist)
 
 
 #==============================================================================# 
 # Portfolios ----
 #==============================================================================#
 
-temp = merge(dat[, .(permno,yyyymm,bh1m)], forecast
-             ,by = c('permno','yyyymm') ) 
-
-port = temp %>% 
+port = forecast %>% 
   group_by(yyyymm) %>% 
   mutate(port = ntile(Ebh1m,10)) %>% 
   mutate(port = sprintf('%02.0f',port)) %>% 
@@ -261,12 +406,16 @@ port = port %>% rbind(LSport)
 # Save to disk ----
 #==============================================================================#
 
+# save tuning results
+tuneresult = tuneresult %>% arrange(-best,oos_begin)
+fwrite(tuneresult, paste0(outroot,outfolder,'/tuning-results.csv'))
 
 # save forecasts
 fwrite(forecast, paste0(outroot,outfolder,'/permno-month-forecast.csv'))
 
 # save portfolios
 fwrite(port, paste0(outroot,outfolder,'/portsort.csv'))
+
 
 # save settings and summary
 sink(paste0(outroot,outfolder,'/summary and settings.txt'))
@@ -287,13 +436,8 @@ format(opt)
 cat('\n\n')
 
 print('================================')
-print('optranger')
-format(optranger)
-cat('\n\n')
-
-print('================================')
-print('optkeras')
-format(optkeras)
+print('optmodel')
+format(optmodel)
 cat('\n\n')
 
 
@@ -303,3 +447,4 @@ as.data.frame(signals_list)
 cat('\n\n')
 
 sink()
+
