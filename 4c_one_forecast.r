@@ -4,26 +4,31 @@
 # Setup ----
 #==============================================================================#
 rm(list = ls())
-library(ranger)
+repulldata = T # use F if debugging and impatient
+
 library(data.table)
 library(tidyverse)
 library(ggplot2)
 library(zoo)
 library(janitor)
 
+# ml libraries
+library(ranger)
 library(tensorflow)
 library(keras)
+library(lightgbm)
 
 # model independent options
 opt = list(
-  data_file = '../output/bcsignals/bcsignals_none.csv'
-  , yearm_begin = '1995-06'
-  , refit_period = 12 # months
-  , insamp_months = 12*10 
-  , yearm_end = '2020-12'
+  model = 'keras4' # 'ranger' or 'lm' or 'lightgbm' or 'keras1'-'keras4'
+  , data_file = '../output/bcsignals/bcsignals_em.csv'
+  , yearm_begin = '1995-06' # insamp_end begin
+  , yearm_end = '2020-06'  
+  , refit_period = 12 # months  
+  , insamp_months_min = 12*10 
+  , validate_months = 12*5  
+  , window_type = 'expanding' # rolling or expanding
   , cores_frac = 0.5
-  , model = 'keras' # 'ranger' or 'lm' or 'keras'
-  , validate_months = 12*2
   , verbose = 1
 )
 
@@ -34,20 +39,21 @@ outroot = '../output/forecast/'
 # settings for specific algos
 # max.depth = NULL dramatically slows things down
 optranger = list( 
-  num.tree = 300, max.depth = c(3,6,9), mtry = c(15,30,60)
+  num.tree = 300, max.depth = c(1,3,6), mtry = c(3,10,30,50)
 )
 
-# optkeras = list(
-#   lambda1 = c(1e-5, 1e-3)
-#   , learning_rate = c(0.001, 0.01)
-#   , batch_size = 10000, epochs = 100, patience = 5, ensemble_num = 10
-# )
-
-# test settings
 optkeras = list(
-  lambda1 = c(1e-3)
-  , learning_rate = c(0.001)
-  , batch_size = 10000, epochs = 100, patience = 5, ensemble_num = 1
+  lambda1 = c(1e-5, 1e-3)
+  , learning_rate = c(0.001, 0.01)
+  , batch_size = 10000, epochs = 100, patience = 5, ensemble_num = 10
+)
+
+optlightgbm = list(
+  objective = 'regression' # can't seem to get huber to work ok on sims
+  , num_tree = c(500, 750, 1000) # allowing num_tree < 500 ends up performing pretty bad
+  , learning_rate = c(0.01, 0.10) # default 0.1 (a.k.a. shrinkage)
+  , max_depth = c(1,2) # default -1 and <= 0 implies no limit
+  , force_col_wise = TRUE # TRUE suppresses warning (something about multi-threading)
 )
 
 optlm = list(
@@ -62,7 +68,7 @@ signals_keep = NULL # e.g. c('size','bm','mom12m')
 # Data pull ----
 #==============================================================================#
 
-if (T) {# Read in data 
+if (repulldata) {# Read in data 
   dat <- fread(opt$data_file)
   setnames(dat, colnames(dat), tolower(colnames(dat))) # ensure lower
   dat[, yyyymm := as.yearmon(yyyymm)]
@@ -117,19 +123,17 @@ if (T) {# Read in data
 #==============================================================================#
 # uses info from data pull, so is after data pull
 
-# trying to increase cpu usage of keras, but 
-# this doesn't work 
-# https://github.com/rstudio/keras/issues/562
-# config <- tf$ConfigProto(intra_op_parallelism_threads = 2L,
-#                          inter_op_parallelism_threads = 2L)
-# session = tf$Session(config = config)
-# k_set_session(session)
 
+if (substr(opt$model,1,5)=='keras'){
+  optsuffix = 'keras'
+} else {
+  optsuffix = opt$model
+}
 
 # create optmodel and make list of tuning settings
-evalme = paste0('optmodel = opt', opt$model) 
+evalme = paste0('optmodel = opt', optsuffix) 
 eval(parse(text = evalme))
-tuneset = optmodel %>% expand.grid() %>% arrange(across(everything()))
+tuneset = optmodel %>% expand.grid(stringsAsFactors = F) %>% arrange(across(everything()))
 
 
 # replace null options with defaults
@@ -140,8 +144,9 @@ if (is.null(optmodel$ensemble_num)){
 # create folder
 if (is.null(customname)) {
   outfolder = paste(
-    str_remove(basename(opt$data_file), '.csv')
-    , opt$model, sep = '-'
+    opt$model
+    , str_remove(basename(opt$data_file), '.csv')
+    , sep = '-'
   )
 } else {
   outfolder = customname
@@ -216,21 +221,74 @@ fit_and_forecast = function(modelname, hyperpar, fit_start, fit_end, fcast_start
     pred.ra = predict(fit, oos) 
     Ebh1m = pred.ra$predictions
     
-  } else if (modelname == 'keras') {
+  } else if (modelname == 'lightgbm'){
+    
+    tempparam = hyperpar[names(hyperpar) != 'ensemble_num']
+    tempparam$num_threads = floor(parallel::detectCores()*opt$cores_frac)
+    fit = lightgbm(
+      data = as.matrix(insamp %>% select(all_of(signals_list)))
+      , label = as.matrix(insamp %>% select(bh1m))
+      , params = tempparam
+      , verbose = opt$verbose
+    )
+    
+    # predict
+    Ebh1m = predict(fit, as.matrix(oos %>% select(all_of(signals_list))))
+    
+    
+  } else if (substr(modelname,1,5) == 'keras') {
+    # neural network has 5 different types
     
     # build model
-    #   Gu Kelly Xiu's NN4 (page 22)
-    keras_model = keras_model_sequential() %>%
-      layer_dense(32, activation = 'relu'
-                  , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
-      # layer_dense(16, activation = 'relu'
-      #             , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
-      # layer_dense(8, activation = 'relu'
-      #             , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
-      # layer_dense(4, activation = 'relu'
-      #             , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
-      layer_dense(1)
-    
+    #   see Gu Kelly Xiu page 22 / 2244
+    nlayer = substr(modelname,6,6) %>% as.numeric
+    if (nlayer == 1){
+      keras_model = keras_model_sequential() %>%
+        layer_dense(32, activation = 'relu'
+                    , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
+        layer_dense(1)
+    } else if (nlayer == 2){
+      keras_model = keras_model_sequential() %>%
+        layer_dense(32, activation = 'relu'
+                    , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
+        layer_dense(16, activation = 'relu'
+                    , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) 
+        layer_dense(1)      
+    } else if (nlayer == 3){
+
+      keras_model = keras_model_sequential() %>%
+        layer_dense(32, activation = 'relu'
+                    , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
+        layer_dense(16, activation = 'relu'
+                    , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
+        layer_dense(8, activation = 'relu'
+                    , kernel_regularizer = regularizer_l1(hyperpar$lambda1))
+        layer_dense(1)      
+    } else if (nlayer == 4){
+      keras_model = keras_model_sequential() %>%
+        layer_dense(32, activation = 'relu'
+                    , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
+        layer_dense(16, activation = 'relu'
+                    , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
+        layer_dense(8, activation = 'relu'
+                    , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
+        layer_dense(4, activation = 'relu'
+                    , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
+        layer_dense(1)      
+    } else if (nlayer == 5){
+      keras_model = keras_model_sequential() %>%
+        layer_dense(32, activation = 'relu'
+                    , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
+        layer_dense(16, activation = 'relu'
+                    , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
+        layer_dense(8, activation = 'relu'
+                    , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
+        layer_dense(4, activation = 'relu'
+                    , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
+        layer_dense(2, activation = 'relu'
+                    , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%        
+        layer_dense(1)      
+    }
     
     keras_model %>%  compile(
       loss = 'mean_squared_error',
@@ -280,15 +338,26 @@ fit_and_forecast = function(modelname, hyperpar, fit_start, fit_end, fcast_start
 
 # create list of sample sets
 sample_list = data.frame(
-  insamp_end = seq(as.yearmon(opt$yearm_begin), as.yearmon(opt$yearm_end), opt$refit_period/12)
+  insamp_end = seq(
+    as.yearmon(opt$yearm_begin), as.yearmon(opt$yearm_end), opt$refit_period/12
+  )
 ) %>% 
   mutate(
-    insamp_begin = insamp_end - opt$insamp_months/12
-    , oos_begin = insamp_end + 1/12
-    , oos_end = lead(insamp_end) - 1/12
+    oos_begin = insamp_end + 1/12
+    , oos_end = oos_begin + opt$refit_period/12 - 1/12
     , tune_split = insamp_end - opt$validate_months/12
-  ) %>% 
-  filter(row_number() < n()) %>%  # don't oos after opt$yearm_end
+  ) 
+  
+
+# make expanding 
+if (opt$window_type == 'rolling'){
+  sample_list = sample_list %>% 
+    mutate(insamp_begin = insamp_end - opt$insamp_months_min/12)
+} else if (opt$window_type == 'expanding'){
+  sample_list = sample_list %>% 
+    mutate(insamp_begin = min(insamp_end) - opt$insamp_months_min/12)
+}
+sample_list = sample_list %>% 
   select(insamp_begin, tune_split, everything())
 
 
@@ -325,7 +394,9 @@ for (sampi in 1:dim(sample_list)[1]){
       mutate(best = rmse == min(rmse)) %>% 
       arrange(rmse) 
       
-    hyperparbest = tunesum %>% filter(best)
+    hyperparbest = tunesum %>% filter(best) %>% 
+      arrange(across(everything())) %>% 
+      filter(row_number() == 1) # break ties
     
   } else {
     # no tuning requested
@@ -381,25 +452,44 @@ tuneresult = rbindlist(tunelist)
 # Portfolios ----
 #==============================================================================#
 
-port = forecast %>% 
-  group_by(yyyymm) %>% 
-  mutate(port = ntile(Ebh1m,10)) %>% 
-  mutate(port = sprintf('%02.0f',port)) %>% 
-  group_by(port,yyyymm) %>% 
-  summarize(nstock = sum(!is.na(bh1m)), bh1m = mean(bh1m, na.rm=T))
+make_ports = function(sweight = 'ew'){
+  
+  if (sweight == 'ew'){
+    temp = forecast %>% mutate(weight = 1)
+  } else if (sweight == 'vw'){
+    temp = forecast %>% 
+      left_join(dat %>% transmute(permno,yyyymm, weight = me)
+                , by = c('permno','yyyymm')) 
+  }
+  
+  port = temp %>% 
+    filter(!is.na(weight+bh1m)) %>% 
+    group_by(yyyymm) %>% 
+    mutate(port = ntile(Ebh1m,10)) %>% 
+    mutate(port = sprintf('%02.0f',port)) %>% 
+    group_by(port,yyyymm) %>% 
+    summarize(nstock = sum(!is.na(bh1m))
+              , bh1m = weighted.mean(bh1m,weight)
+    )
+  
+  LSport = port %>% filter(port %in% c('01','10'))   %>% 
+    pivot_wider(
+      id_cols = 'yyyymm', names_from = 'port'
+      , values_from = c('bh1m','nstock'), names_prefix = 'port'
+    ) %>% 
+    mutate(
+      bh1m = bh1m_port10 - bh1m_port01
+      , nstock = nstock_port10 + nstock_port01
+    ) %>% 
+    transmute(port = 'LS', yyyymm, bh1m, nstock)
+  
+  port = port %>% rbind(LSport) %>% mutate(sweight = sweight)
+  
+  port
+}
 
-LSport = port %>% filter(port %in% c('01','10'))   %>% 
-  pivot_wider(
-    id_cols = 'yyyymm', names_from = 'port'
-    , values_from = c('bh1m','nstock'), names_prefix = 'port'
-  ) %>% 
-  mutate(
-    bh1m = bh1m_port10 - bh1m_port01
-    , nstock = nstock_port10 + nstock_port01
-  ) %>% 
-  transmute(port = 'LS', yyyymm, bh1m, nstock)
-
-port = port %>% rbind(LSport)
+port = rbind(make_ports('ew'), make_ports('vw'))
+  
 
 
 #==============================================================================# 
@@ -420,15 +510,31 @@ fwrite(port, paste0(outroot,outfolder,'/portsort.csv'))
 # save settings and summary
 sink(paste0(outroot,outfolder,'/summary and settings.txt'))
 print('================================')
-print('port sumstats')
-port %>% group_by(port) %>% 
+print('ew port sumstats')
+port %>% 
+  filter(sweight == 'ew') %>% 
+  group_by(port) %>% 
   summarize(
     rbar = mean(bh1m), vol = sd(bh1m), SRann = rbar/vol*sqrt(12)
     , nstock = mean(nstock)
     , nmonth = n()
   ) %>% 
-  filter(port != 'NA')
+  filter(port != 'NA') 
 cat('\n\n')
+
+print('================================')
+print('vw port sumstats')
+port %>% 
+  filter(sweight == 'vw') %>% 
+  group_by(port) %>% 
+  summarize(
+    rbar = mean(bh1m), vol = sd(bh1m), SRann = rbar/vol*sqrt(12)
+    , nstock = mean(nstock)
+    , nmonth = n()
+  ) %>% 
+  filter(port != 'NA') 
+cat('\n\n')
+
 
 print('================================')
 print('opt')
