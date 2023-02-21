@@ -6,6 +6,7 @@
 rm(list = ls())
 repulldata = T # use F if debugging and impatient
 
+
 library(data.table)
 library(tidyverse)
 library(ggplot2)
@@ -18,28 +19,54 @@ library(tensorflow)
 library(keras)
 library(lightgbm)
 
-# model independent options
-opt = list(
-  model = 'keras4' # 'ranger' or 'lm' or 'lightgbm' or 'keras1'-'keras4'
-  , data_file = '../output/bcsignals/bcsignals_em.csv'
-  , yearm_begin = '1995-06' # insamp_end begin
-  , yearm_end = '2020-06'  
-  , refit_period = 12 # months  
-  , insamp_months_min = 12*10 
-  , validate_months = 12*5  
-  , window_type = 'expanding' # rolling or expanding
-  , cores_frac = 0.5
-  , verbose = 1
+# command line options
+optcmd <- optparse::OptionParser(
+  option_list = list(
+    optparse::make_option(c("--model"),
+                          type = "character", default = "pcr",
+                          help = "'ranger', 'lm', 'lightgbm' or 'keras1'-'keras4' or 'pcr' or 'spcr' "),
+    optparse::make_option(c("--signal_file"),
+                          type = "character", default = "../output/bcsignals/bcsignals_none.csv",
+                          help = "permno-month-signal csv"),
+    optparse::make_option(c("--output_folder"),
+                          type = "character", default = 'auto',
+                          help = "results go here.  use 'auto' to auto-generate"),
+    optparse::make_option(c("--yearm_begin"),
+                          type = "character", default = '1995-06',
+                          help = "first in-sample end"),
+    optparse::make_option(c("--yearm_end"),
+                          type = "character", default = '2020-06',
+                          help = "last in-sample end")
+  )
+)  %>% optparse::parse_args()
+
+# other options (too lazy to add to parser)
+opt = c(optcmd, 
+        list(
+          refit_period = 12 # months  
+          , insamp_months_min = 12*10 
+          , validate_months = 12*12  
+          , window_type = 'expanding' # rolling or expanding
+          , cores_frac = 0.5
+          , verbose = 0
+        )
 )
 
 # output names
-customname = NULL
 outroot = '../output/forecast/'
+
+# keep this subset for testing, use NULL for keep all
+signals_keep = NULL # e.g. c('size','bm','mom12m')
+
+#==============================================================================#
+# Hyper Model Setup ----
+#==============================================================================#
 
 # settings for specific algos
 # max.depth = NULL dramatically slows things down
+# max.depth = 6 and mtry = 50 very slow too
 optranger = list( 
-  num.tree = 300, max.depth = c(1,3,6), mtry = c(3,10,30,50)
+  num.tree = 300, max.depth = c(1,3,5), mtry = c(3,10,30)
 )
 
 optkeras = list(
@@ -50,7 +77,7 @@ optkeras = list(
 
 optlightgbm = list(
   objective = 'regression' # can't seem to get huber to work ok on sims
-  , num_tree = c(500, 750, 1000) # allowing num_tree < 500 ends up performing pretty bad
+  , num_tree = c(1, 250, 500, 750, 1000) # allowing num_tree < 500 ends up performing pretty bad
   , learning_rate = c(0.01, 0.10) # default 0.1 (a.k.a. shrinkage)
   , max_depth = c(1,2) # default -1 and <= 0 implies no limit
   , force_col_wise = TRUE # TRUE suppresses warning (something about multi-threading)
@@ -60,8 +87,13 @@ optlm = list(
   blank = NA_real_
 )
 
-# keep this subset for testing, use NULL for keep all
-signals_keep = NULL # e.g. c('size','bm','mom12m')
+optpcr = list(
+  n_pcs = seq(10,90,20), renormalize = TRUE
+)
+
+optspcr = list(
+  n_pcs = seq(10,90,20), renormalize = TRUE
+)
 
 
 #==============================================================================#
@@ -69,12 +101,14 @@ signals_keep = NULL # e.g. c('size','bm','mom12m')
 #==============================================================================#
 
 if (repulldata) {# Read in data 
-  dat <- fread(opt$data_file)
+  dat <- fread(opt$signal_file)
   setnames(dat, colnames(dat), tolower(colnames(dat))) # ensure lower
   dat[, yyyymm := as.yearmon(yyyymm)]
   
   # bcsignals_none.csv seems to have crsp info stuff that we should remove
-  dat[ , ':=' (me = NULL)]
+  if ('me' %in% colnames(dat)){
+    dat[ , ':=' (me = NULL)]
+  }
   
   crsp_data <- fread("../data/crsp_data.csv")[, .(permno, yyyymm, me, ret)] 
   crsp_data[ , yyyymm := as.yearmon(yyyymm)]
@@ -133,7 +167,9 @@ if (substr(opt$model,1,5)=='keras'){
 # create optmodel and make list of tuning settings
 evalme = paste0('optmodel = opt', optsuffix) 
 eval(parse(text = evalme))
-tuneset = optmodel %>% expand.grid(stringsAsFactors = F) %>% arrange(across(everything()))
+tuneset = optmodel %>% expand.grid(stringsAsFactors = F) %>% 
+  arrange(across(everything())) %>% 
+  mutate(setid = row_number())
 
 
 # replace null options with defaults
@@ -141,15 +177,20 @@ if (is.null(optmodel$ensemble_num)){
   optmodel$ensemble_num = 1
 }
 
+# make sure n_pcs is less than the number of characteristics
+if (opt$model %in% c('pcr','spcr')){
+  optmodel$n_pcs[optmodel$n_pcs > length(signals_list)] = NULL
+}
+
 # create folder
-if (is.null(customname)) {
+if (opt$output_folder == 'auto') {
   outfolder = paste(
     opt$model
-    , str_remove(basename(opt$data_file), '.csv')
+    , str_remove(basename(opt$signal_file), '.csv')
     , sep = '-'
   )
 } else {
-  outfolder = customname
+  outfolder = opt$output_folder
 }
 dir.create(paste0(outroot), showWarnings = F)
 dir.create(paste0(outroot,outfolder), showWarnings = F)
@@ -191,6 +232,39 @@ print('signals_used')
 print(signals_list)
 
 
+#==============================================================================# 
+# Sample Setup ----
+#==============================================================================#
+
+
+# create list of sample sets
+sample_list = data.frame(
+  insamp_end = seq(
+    as.yearmon(opt$yearm_begin), as.yearmon(opt$yearm_end), opt$refit_period/12
+  )
+) %>% 
+  mutate(
+    oos_begin = insamp_end + 1/12
+    , oos_end = oos_begin + opt$refit_period/12 - 1/12
+  ) 
+
+# make expanding 
+if (opt$window_type == 'rolling'){
+  sample_list = sample_list %>% 
+    mutate(insamp_begin = insamp_end - opt$insamp_months_min/12)
+} else if (opt$window_type == 'expanding'){
+  sample_list = sample_list %>% 
+    mutate(insamp_begin = min(insamp_end) - opt$insamp_months_min/12)
+}
+
+# add tuning split
+#   split is the smaller of: half the sample vs opt$validate_months
+sample_list = sample_list %>% 
+  mutate(
+    tune_year = pmin(round((insamp_end - insamp_begin)/2), opt$validate_months/12)
+    , tune_split = insamp_end - tune_year
+  ) %>% 
+  select(insamp_begin, tune_split, tune_year, insamp_end, oos_begin, oos_end)
 
 #==============================================================================# 
 # fit_and_forecast function ----
@@ -200,6 +274,9 @@ print(signals_list)
 fit_and_forecast = function(modelname, hyperpar, fit_start, fit_end, fcast_start, fcast_end, seed = NULL){
   
   # create subsamples
+  #   timing implies trades are being made at the end of July
+  #   this way models know the relationship between signals at end of june
+  #   and returns in july
   insamp = dat[yyyymm >=  fit_start & yyyymm <= fit_end]
   oos  = dat[yyyymm >=  fcast_start & yyyymm <= fcast_end]  
   
@@ -207,6 +284,78 @@ fit_and_forecast = function(modelname, hyperpar, fit_start, fit_end, fcast_start
     form = paste0('bh1m ~ ', paste(signals_list, collapse = '+'))  
     fit = lm(form, data=insamp)
     Ebh1m = predict(fit, oos)
+    
+  } else if (modelname %in% c('pcr','spcr')){
+    
+    # renorm in-samp, saving transformation, if requested
+    temp = insamp %>% select(all_of(signals_list)) %>% as.matrix()
+    if (hyperpar$renormalize){
+      mu = apply(temp, 2, mean)
+      sig = apply(temp, 2, sd)
+      temp = temp - matrix(t(mu), dim(temp)[1], dim(temp)[2], byrow = T)
+      temp = temp / matrix(t(sig), dim(temp)[1], dim(temp)[2], byrow = T)
+    }
+    
+    if (modelname == 'spcr'){
+      
+      # regress bh1m on each signal
+      tempreg = cbind(insamp %>% select(bh1m), temp)
+      slope = lapply(
+        signals_list
+        , function(signalname){
+          summary(lm(
+            paste0('bh1m ~ ', signalname), tempreg
+          ))$coefficients[signalname, 'Estimate']
+        }
+      )
+      
+      # save slopes
+      slopedat = data.table(
+        signalname = signals_list,
+        slope = as.numeric(slope)
+      )
+      
+      # re-scale with slope
+      temp = temp * matrix(t(slopedat$slope), dim(temp)[1], dim(temp)[2], byrow = T)
+    }
+    
+    
+    # pc decomp
+    #   of svd, prcomp, and eigen, eigen seems to be the fastest
+    eig = eigen(cov(temp))
+    pc = temp %*% eig$vectors[ , 1:hyperpar$n_pcs]
+    insamp_pc = data.table(
+      bh1m = insamp$bh1m, pc
+    )
+    
+    # sanity check
+    # pcalt = prcomp(temp)
+    # pc[1:10,1:4]
+    # pcalt$x[1:10,1:4]
+    
+    # make formula, pc's are auto-prefixed with V
+    form = paste0("bh1m ~ ", paste(paste0("V", 1:hyperpar$n_pcs), collapse = "+"))
+    fit = lm(form, data=insamp_pc)
+    
+    # renorm oos or not
+    temp = oos %>% select(all_of(signals_list)) %>% as.matrix()    
+    if (hyperpar$renormalize){
+      temp = temp - matrix(t(mu), dim(temp)[1], dim(temp)[2], byrow = T)
+      temp = temp / matrix(t(sig), dim(temp)[1], dim(temp)[2], byrow = T)    
+    }
+    
+    if (modelname == 'spcr'){
+      # re-scale with slope
+      temp = temp * matrix(t(slopedat$slope), dim(temp)[1], dim(temp)[2], byrow = T)
+    }
+    
+    # rotate
+    oos_pc = data.table(
+      temp %*% eig$vectors[ , 1:hyperpar$n_pcs]
+    )
+    
+    # finally, predict
+    Ebh1m <- predict(fit, oos_pc)
     
   } else if (modelname == 'ranger'){
     
@@ -252,17 +401,17 @@ fit_and_forecast = function(modelname, hyperpar, fit_start, fit_end, fcast_start
         layer_dense(32, activation = 'relu'
                     , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
         layer_dense(16, activation = 'relu'
-                    , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) 
+                    , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>% 
         layer_dense(1)      
     } else if (nlayer == 3){
-
+      
       keras_model = keras_model_sequential() %>%
         layer_dense(32, activation = 'relu'
                     , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
         layer_dense(16, activation = 'relu'
                     , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>%
         layer_dense(8, activation = 'relu'
-                    , kernel_regularizer = regularizer_l1(hyperpar$lambda1))
+                    , kernel_regularizer = regularizer_l1(hyperpar$lambda1)) %>% 
         layer_dense(1)      
     } else if (nlayer == 4){
       keras_model = keras_model_sequential() %>%
@@ -332,40 +481,17 @@ fit_and_forecast = function(modelname, hyperpar, fit_start, fit_end, fcast_start
 
 
 
+
 #==============================================================================# 
 # Loop over sample sets ----
 #==============================================================================#
 
-# create list of sample sets
-sample_list = data.frame(
-  insamp_end = seq(
-    as.yearmon(opt$yearm_begin), as.yearmon(opt$yearm_end), opt$refit_period/12
-  )
-) %>% 
-  mutate(
-    oos_begin = insamp_end + 1/12
-    , oos_end = oos_begin + opt$refit_period/12 - 1/12
-    , tune_split = insamp_end - opt$validate_months/12
-  ) 
-  
-
-# make expanding 
-if (opt$window_type == 'rolling'){
-  sample_list = sample_list %>% 
-    mutate(insamp_begin = insamp_end - opt$insamp_months_min/12)
-} else if (opt$window_type == 'expanding'){
-  sample_list = sample_list %>% 
-    mutate(insamp_begin = min(insamp_end) - opt$insamp_months_min/12)
-}
-sample_list = sample_list %>% 
-  select(insamp_begin, tune_split, everything())
 
 
 # loop
 tic = Sys.time()
 outlist = list()
 tunelist = list()
-file.remove(paste0(outroot,outfolder,'/forecast-loop.log'))
 for (sampi in 1:dim(sample_list)[1]){
   sampcur = sample_list[sampi, ]
   
@@ -437,10 +563,17 @@ for (sampi in 1:dim(sample_list)[1]){
     , " min elapsed = ", min_elapsed
     , " datetime = ", Sys.time()
   )
-  write.table(log.text, paste0(outroot,outfolder, '/forecast-loop.log')
-              , append = TRUE, row.names = FALSE, col.names = FALSE)
+  
+  if (sampi == 1){
+    write.table(log.text, paste0(outroot,outfolder, '/forecast-loop.log')
+                , append = FALSE, row.names = FALSE, col.names = FALSE)
+  } else {
+    write.table(log.text, paste0(outroot,outfolder, '/forecast-loop.log')
+                , append = TRUE, row.names = FALSE, col.names = FALSE)
+  }
+  
   print(tunesum)
-
+  
 }
 
 # bind output
