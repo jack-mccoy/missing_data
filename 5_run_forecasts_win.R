@@ -54,7 +54,7 @@ for (seti in 1:dim(setlist)[1]){
   
   # run one setting
   # outputs to ../output/forecast/[model-bcname]/
-  runme = paste0(' Rscript 4c_one_forecast.R'
+  runme = paste0(' Rscript 5a_one_forecast.R'
                  , ' --model=', setlist[seti, 'model']
                  , ' --signal_file=', setlist[seti, 'signal_file']
                  , ' --output_folder=', setlist[seti, 'output_folder']
