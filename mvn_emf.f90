@@ -2,42 +2,53 @@
 ! Fortran version
 
 ! in/outs 
-!	Ey = data / imputed data
-! 	estE = guessed mu, estimated mu
-!	estR = guessed Sigma, estimated Sigma
+!	X = data / imputed data (N by K)
+! 	mu = guessed mu, estimated mu (K by 1)
+!	Sig = guessed Sigma, estimated Sigma (K by K)
 ! ins
 !	NAindex = indexes of missing values
 
-subroutine mvn_emf(Ey, estE, estR, NAindex, tol, maxiter, K, N, update_estE)
+! Algorithm
+! E-step: 
+!     For each obs i, compute 
+!        e = E(X(i,:) | X(i,obs), mu, Sig)
+!        S = E(X(i,:)*X(i,:)' | X(i,obs), mu, Sig)
+!     Update X with e's
+!     Summarize S with meanS
+! M-step: compute mu_new and Sig_new
+!     mu_new = mean(X)
+!     Sig_new = meanS + mu_new*mu_new'
+
+subroutine mvn_emf(X, mu, Sig, NAindex, tol, maxiter, K, N, update_mu)
 	
 implicit none
 
 !declare input arguments	
 integer K,N
-double precision Ey(N,K), estE(K), estR(K,K)
+double precision X(N,K), mu(K), Sig(K,K)
 logical NAindex(N,K)
 double precision tol
 integer maxiter
-logical update_estE ! .true. updates estE in each iteration (default).  .false. uses inputted estE throughout.
+logical update_mu ! .true. updates mu in each iteration (default).  .false. uses inputted mu throughout.
 
 !declare other stuff
 integer i,j,iter,NAcount,info
-double precision Enew(K), Rnew(K,K)
-double precision Eyy(K,K), thisEy(K), thisEyy(K,K)
-double precision Rdist, Edist
+double precision mu_new(K), Sig_new(K,K)
+double precision meanS(K,K), e(K), S(K,K)
+double precision Sig_dist, mu_dist
 logical thisNA(K), lastNA(K), thisNA2(K,K), thisDataNA(K,K), thisData2(K,K)
-double precision, allocatable :: E1(:), E2(:)
-double precision, allocatable :: R11(:,:), R12(:,:), R22(:,:), invR11R12(:,:)
+double precision, allocatable :: eo_less_muo(:), em(:)
+double precision, allocatable :: Sig_oo(:,:), Sig_om(:,:), Vmm(:,:), invVooVom(:,:)
 
 !calculations start here
 write(*,'(A)') 'Starting EM:'
 
 !allocate first, because we always deallocate first in the loop
-allocate(E1(1),E2(1),R11(1,1),R12(1,1),R22(1,1),invR11R12(1,1)) 
+allocate(eo_less_muo(1),em(1),Sig_oo(1,1),Sig_om(1,1),Vmm(1,1),invVooVom(1,1)) 
 
 iterloop: do iter=1,maxiter
 
-   Eyy=0
+   meanS=0
    lastNA=.false.
    
    
@@ -45,93 +56,88 @@ iterloop: do iter=1,maxiter
    iloop: do i=1,N
 
       NAcount=count(NAindex(i,:))
-      if (NAcount == K) then !no data
+      if (NAcount == 0) then 
+         ! === complete data ===
+         e=X(i,:)
 
-         thisEy=estE
-         thisEyy=estR
+         ! S := Xi*Xi'
+         call dgemm('N','T',K,K,1,1d0,e,K,e,K,1d0,S,K)          
 
-      elseif (NAcount == 0) then !complete data
+      elseif (NAcount == K) then          
+         ! === no data ===
+         e=mu
 
-         thisEy=Ey(i,:)
-         thisEyy=0
+         ! S := Sig + mu*mu'
+         S=Sig
+         call dgemm('N','T',K,K,1,1d0,e,K,e,K,1d0,S,K) 
 
-      else !some data
+      else 
+         ! === some data ===
 
          thisNA=NAindex(i,:)
-         if (any(thisNA .neqv. lastNA)) then !can save the below computations if missingness pattern is the same
-		 
-			! == prep calculations ==
-			! 1 suffix indicates observed
-			! 2 suffix indicates missing
-			! computes
-			!	slope: invR11R12' = R12'*inv(R11)
-			!	new variance: R22 := R22 + invR11R12'R12			
+                  
+         if (any(thisNA .neqv. lastNA)) then 
+            ! find "priors"
+            ! can skip if missingness pattern is the same as last stock
 			
-            !set up indices            
+            ! set up indexes   
             do j=1,K
                thisNA2(j,:)=thisNA(j) .and. thisNA
                thisDataNA(j,:)= (.not.thisNA(j)) .and. thisNA
                thisData2(j,:)= (.not.thisNA(j)) .and. (.not.thisNA)
             end do
 
-            !re-allocate
-            deallocate(E1,E2,R11,R12,R22,invR11R12)
-            allocate(E1(K-NAcount),E2(NAcount))
-            allocate(R11(K-NAcount,K-NAcount))
-            allocate(R12(K-NAcount,NAcount))
-            allocate(R22(NAcount,NAcount))
-            allocate(invR11R12(K-NAcount,NAcount))
+            ! re-allocate
+            deallocate(eo_less_muo,em,Sig_oo,Sig_om,Vmm,invVooVom)
+            allocate(eo_less_muo(K-NAcount),em(NAcount))
+            allocate(Sig_oo(K-NAcount,K-NAcount))
+            allocate(Sig_om(K-NAcount,NAcount))
+            allocate(Vmm(NAcount,NAcount))
+            allocate(invVooVom(K-NAcount,NAcount))
             
-            !calculate the key matrices
-            R11=reshape(pack(estR,thisData2),(/K-NAcount,K-NAcount/))
-            R12=reshape(pack(estR,thisDataNA),(/K-NAcount,NAcount/))
-            R22=reshape(pack(estR,thisNA2),(/NAcount,NAcount/))
+            ! grab Sig components
+            Sig_oo=reshape(pack(Sig,thisData2),(/K-NAcount,K-NAcount/))
+            Sig_om=reshape(pack(Sig,thisDataNA),(/K-NAcount,NAcount/))            
             
-			!compute slope			
-			!solve for invR11R12 in R11*invR11R12 = R12 
-			!	arg 6 in dposv is in/out: in = R12, out = invR11R12 
-			invR11R12=R12 !arg 6 in dposv
-            call dposv('U',K-NAcount,NAcount,R11,K-NAcount,invR11R12,K-NAcount,info) 
+            ! compute slope			
+            ! solve for invVooVom in Sig_oo*invVooVom = Sig_om 
+            ! arg 6 in dposv is in/out: in = Sig_om, out = invVooVom 
+            invVooVom=Sig_om !arg 6 in dposv
+            call dposv('U',K-NAcount,NAcount,Sig_oo,K-NAcount,invVooVom,K-NAcount,info) 
             
-            !compute new variance 
-			!R22 := invR11R12'*R12 + R22
-			!netlib notation: C := A**T*B + C		 
-			!    dgemm(TRA,TRB,M,     ,N       ,K       ,ALPHA,A       ,LDA      ,B  ,K        ,BETA,C ,LDC)
-            call dgemm('T','N',NAcount,NAcount,K-NAcount,-1d0,invR11R12,K-NAcount,R12,K-NAcount,1d0,R22,NAcount) 
-         end if
+            ! compute Vmm = V(Xim|Xiobs)
+            ! Vmm := Sig_mm - invVooVom'*Sig_om 
+            ! netlib notation: C := A**T*B + C		 
+   			!    dgemm(TRA,TRB,M,     ,N       ,K       ,ALPHA,A       ,LDA      ,B  ,K        ,BETA,C ,LDC)
+            Vmm = reshape(pack(Sig,thisNA2),(/NAcount,NAcount/))            
+            call dgemm('T','N',NAcount,NAcount,K-NAcount,-1d0,invVooVom,K-NAcount,Sig_om,K-NAcount,1d0,Vmm,NAcount) 
+         end if		   
 
-		 ! == "impute" missing values ==		 
-		 ! impute with new means E2 :=  E2 + invR11R12'*E1 = E2 +  R12'*inv(R11)*E1
-		 ! i.e. Ey(i,thisNA) = estE(thisNA) + estR(thisDataNA)'*estR(thisData2)^-1*(Ey(i,.not.thisNA)-estE(.not.thisNA))
-         E1=pack(Ey(i,:)-estE,.not.thisNA) ! 
-         E2=pack(estE,thisNA)
-		 ! netlib notation: C := A**T*B + C		 
-		 !    dgemm(TRA,TRB,M,     ,N,K        ,ALPHA,A        ,LDA      ,B ,K        ,BETA,C ,LDC)
-         call dgemm('T','N',NAcount,1,K-NAcount,1d0  ,invR11R12,K-NAcount,E1,K-NAcount,1d0 ,E2,NAcount) 
+         ! replace missing 1st moments with expectations
+         ! em :=  mum + invVooVom'*eo_less_muo 
+		   ! netlib notation: C := C + A**T*B
+		   !    dgemm(TRA,TRB,M,     ,N,K        ,ALPHA,A        ,LDA      ,B ,K        ,BETA,C ,LDC)
+         em=pack(mu,thisNA)
+         eo_less_muo=pack(X(i,:)-mu,.not.thisNA) ! 
+         call dgemm('T','N',NAcount,1,K-NAcount,1d0  ,invVooVom,K-NAcount,eo_less_muo,K-NAcount,1d0 ,em,NAcount) 
 
-         ! == reshape obs and imputed values into full vector ====
-		 !	thisEy (1 x K) combines observed data in Ey(i,:) with means of missing data E2
-         thisEy=Ey(i,:)
-         thisEy=unpack(E2,thisNA,thisEy)
+		   !	e (1 x K) combines observed data in X(i,:) with em
+         e=X(i,:)
+         e=unpack(em,thisNA,e)
 		 
-		 ! == begin reshaping full second moment contribution ==
-		 ! first reshape the variance correction
-		 ! thisEyy (K x K) reshapes var of missing signals R22 to fit full model w/ 0s elsewhere, for now
-		 !		thisEyy will be added to thisEy*thisEy' shortly		 
-         thisEyy=0
-         thisEyy=unpack(reshape(R22,(/NAcount**2/)),thisNA2,thisEyy)
+		   ! initialize second moment S with Vmm
+         S=0
+         S=unpack(reshape(Vmm,(/NAcount**2/)),thisNA2,S)
+
+         ! finish second moment S := S+e*e'
+         call dgemm('N','T',K,K,1,1d0,e,K,e,K,1d0,S,K) 
 
       end if
-
-	  ! == finish full second moment contribution ==	  
-      ! add imputed second moment to variance correction
-	  ! (note there is no correction if there are no missing values in the if statements above)
-	  ! thisEyy := thisEyy+thisEy*thisEy'
-      call dgemm('N','T',K,K,1,1d0,thisEy,K,thisEy,K,1d0,thisEyy,K) 
+     
 	  
 	  ! update
-      Ey(i,:)=thisEy ! store full imputed dataset
-      Eyy=Eyy+thisEyy/N ! reduce second moment (each stock contributes thisEyy/N)
+      X(i,:) = e ! store full imputed dataset
+      meanS=meanS+S/N ! reduce second moments to just what we need
       lastNA=thisNA
 
    end do iloop
@@ -139,28 +145,31 @@ iterloop: do iter=1,maxiter
    ! ==== update estimates (M-step) ====
    
    ! Update mean 
-   if ( update_estE ) then
-	   do j=1,K
-		  Enew(j)=sum(Ey(:,j))/N
+   if ( update_mu ) then
+      do j=1,K
+         mu_new(j)=sum(X(:,j))/N
 	   end do
    else
-	   Enew = estE
+      mu_new = mu
    end if
    
    ! Update covariance
-   !Rnew := Eyy + Enew*Enew'
-   Rnew=Eyy
-   call dgemm('N','T',K,K,1,-1d0,Enew,K,Enew,K,1d0,Rnew,K) 
+   ! Sig_new := meanS - mu_new*mu_new'
+   ! Netlib Notation:
+   ! C :=beta*C + alf*oA(A)*oB(B) 
+   !          oA  oB  M N K  alf A    DA B  DB beta C   DC
+   Sig_new=meanS   
+   call dgemm('N','T',K,K,1,-1d0,mu_new,K,mu_new,K,1d0,Sig_new,K) 
 
    !check convergence
-   Edist=maxval(abs(Enew-estE))
-   Rdist=maxval(abs(Rnew-estR))
-   write(*,'(A I4 A ES8.2)') 'iter ',iter,', dist=',max(Edist,Rdist)
-   if ( Edist < tol .and. Rdist < tol ) then
+   mu_dist=maxval(abs(mu_new-mu))
+   Sig_dist=maxval(abs(Sig_new-Sig))
+   write(*,'(A I4 A ES8.2)') 'iter ',iter,', dist=',max(mu_dist,Sig_dist)
+   if ( mu_dist < tol .and. Sig_dist < tol ) then
       exit iterloop
    end if
-   estE=Enew
-   estR=Rnew
+   mu=mu_new
+   Sig=Sig_new
 
 end do iterloop
 
@@ -172,8 +181,8 @@ else
 end if
 
 maxiter=iter
-estE=Enew
-estR=Rnew
+mu=mu_new
+Sig=Sig_new
 
 end
 

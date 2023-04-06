@@ -31,6 +31,11 @@ mvn_emf <- function(y, E0, R0, update_estE = TRUE,
   nan.index <- is.na(y)
   y[nan.index] <- 0
   
+  # check dimensions
+  if (K != length(E0)){
+    stop('E0 does not match y')
+  }
+  
   fvals <- .Fortran(
     "mvn_emf", Ey = as.double(y),
     estE = as.double(E0), estR = as.double(R0),
