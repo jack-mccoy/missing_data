@@ -10,9 +10,9 @@ library(dplyr)
 set.seed(3)
 
 
-J = 4 # number of signals
-N = 100 # number of stocks
-obs_frac = 1 # fraction observed
+J = 10 # number of signals
+N = 500 # number of stocks
+obs_frac = 0.5 # fraction observed
 
 # draw true parameters
 Sig0 = matrix(rnorm(J*J), nrow = J)

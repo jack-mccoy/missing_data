@@ -7,6 +7,7 @@
 !	Sig = guessed Sigma, estimated Sigma (K by K)
 ! ins
 !	NAindex = indexes of missing values
+!  mu_fixed = indexes of mu that are known
 
 ! Algorithm
 ! E-step: 
@@ -15,9 +16,10 @@
 !        S = E(X(i,:)*X(i,:)' | X(i,obs), mu, Sig)
 !     Update X with e's
 !     Summarize S with meanS
-! M-step: compute mu_new and Sig_new
+!     Summarize e with meane
+! M-step: compute mu_new and Sig_new, pedantically (required for mu_fixed)
 !     mu_new = mean(X)
-!     Sig_new = meanS + mu_new*mu_new'
+!     Sig_new = meanS - mu_new*means' - means*mu_new' + mu_new*mu_new'
 
 subroutine mvn_emf(X, mu, Sig, NAindex, tol, maxiter, K, N, mu_fixed)
 	
@@ -34,7 +36,7 @@ double precision mu_fixed(K)
 !declare other stuff
 integer i,j,l,iter,NAcount,info
 double precision mu_new(K), Sig_new(K,K)
-double precision meanS(K,K), e(K), S(K,K)
+double precision S(K,K), meanS(K,K), e(K), meane(K) 
 double precision Sig_dist, mu_dist
 logical thisNA(K), lastNA(K), thisNA2(K,K), thisDataNA(K,K), thisData2(K,K)
 double precision, allocatable :: eo_less_muo(:), em(:)
@@ -52,6 +54,7 @@ allocate(eo_less_muo(1),em(1),Sig_oo(1,1),Sig_om(1,1),Vmm(1,1),invVooVom(1,1))
 iterloop: do iter=1,maxiter
 
    meanS=0
+   meane=0
    lastNA=.false.
    
    
@@ -140,33 +143,21 @@ iterloop: do iter=1,maxiter
 	  ! update
       X(i,:) = e ! store full imputed dataset
       meanS=meanS+S/N ! reduce second moments to just what we need
+      meane=meane+e/N ! reduce 1st moments just for "elegance"
       lastNA=thisNA
 
    end do iloop
 
    ! ==== update estimates (M-step) ====   
-   ! Update mean    
-   do j=1,K
-      mu_new(j)=sum(X(:,j))/N
-   end do
-
-   ! don't update elements marked by mu_fixed
-   write(1,*) 'old ', mu
-   write(1,*) 'new ', mu_new
-   write(1,*) 'fix ', mu_fixed
-
-   mu_new = mu_new * (1-mu_fixed) + mu * mu_fixed
-
-   write(1,*) 'upd ', mu_new
+   ! Update mean, unless marked by mu_fixed    
+   mu_new = meane * (1-mu_fixed) + mu * mu_fixed
    
-   ! Update covariance
-   ! Sig_new := meanS - mu_new*mu_new'
+   ! Update covariance, pedantically (required if mu_fixed != 0)
+   ! Sig_new := meanS - mu_new*meane' - meane*mu_new' + mu_new*mu_new'
    Sig_new=meanS   
-   call dgemm('N','T',K,K,1,-1d0,mu_new,K,mu_new,K,1d0,Sig_new,K) 
-
-   write(1,*) 'Sig     ', Sig
-   write(1,*) 'Sig_new ', Sig_new
-   write(1,*) 'meanS   ', meanS
+   call dgemm('N','T',K,K,1,-1d0,mu_new,K,meane,K,1d0,Sig_new,K) 
+   call dgemm('N','T',K,K,1,-1d0,meane,K,mu_new,K,1d0,Sig_new,K) 
+   call dgemm('N','T',K,K,1,+1d0,mu_new,K,mu_new,K,1d0,Sig_new,K) 
 
    !check convergence
    mu_dist=maxval(abs(mu_new-mu))
