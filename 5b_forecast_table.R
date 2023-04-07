@@ -4,9 +4,17 @@ library(kableExtra)
 library(stringr)
 library(zoo)
 
+#===============================================================================
+# Hardcodes
+#===============================================================================
+
 fcast_dir <- "/scratch/jpm2223/forecast/"
 fcasts <- system(paste("ls", fcast_dir), intern=TRUE) 
 fcasts_files <- paste0(fcast_dir, fcasts, "/permno-month-forecast.csv")
+
+#===============================================================================
+# Read in data
+#===============================================================================
 
 # Read in data
 crsp_data <- fread("../data/crsp_data.csv")[, c("permno", "yyyymm", "me")]
@@ -21,8 +29,10 @@ fcast_data <- rbindlist(lapply(fcasts, function(f) {
 
 # Merge and make dates nice 
 fcast_data <- merge(fcast_data, crsp_data, by = c("permno", "yyyymm"))
-#fcast_data[, yyyymm := zoo::as.yearmon(yyyymm)]
-#fcast_data[, n_unique := length(unique(Ebh1m)), by = .(yyyymm, method, imp)]
+
+#===============================================================================
+# Create long-short portfolios
+#===============================================================================
 
 # Define deciles
 fcast_data[,
@@ -35,6 +45,8 @@ fcast_data[,
     decile := ifelse(Ebh1m <= pctile10, 1, ifelse(Ebh1m >= pctile90, 10, NA)) 
 ]
 
+# Average portfolios by prediction decile for month, method, and imp
+# make negative (short) if lowest decile
 ports <- fcast_data[
     decile %in% c(1, 10), 
     .(
@@ -44,12 +56,22 @@ ports <- fcast_data[
     by = .(yyyymm, method, imp, decile)
 ]
 
+# Mean portfolios for each leg
 ports_mean <- ports[, .(ew = mean(ew), vw = mean(vw)), by = .(method, imp, decile)]
 
-ls_ports_mean <- ports_mean[, .(ew = 12*sum(ew), vw = 12*sum(vw)), by = .(method, imp)]
+# Long-short portfolios (annualized)
+ls_ports_mean <- ports_mean[, 
+    .(ew = 12*sum(ew), vw = 12*sum(vw)),
+    by = .(method, imp)
+]
 
+# Convert to nicer table with imputation rows and fcast method cols
 table_ew <- dcast(ls_ports_mean, "imp ~ method", value.var = "ew")
 table_vw <- dcast(ls_ports_mean, "imp ~ method", value.var = "vw")
+
+#===============================================================================
+# Output
+#===============================================================================
 
 fwrite(table_ew, '../dump/fcast_table_ew.csv')
 fwrite(table_vw, '../dump/fcast_table_vw.csv')
