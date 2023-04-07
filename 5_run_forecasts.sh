@@ -1,10 +1,9 @@
 #/bin/bash
 
 # Array of model names
-mods=("lm")
-#"pcr" "spcr" "keras1" "keras2" "keras3" "keras4" "keras5" "lightgbm" "ranger")
+mods=("keras1" "keras2" "keras3" "keras4" "keras5" "ranger" "lightgbm" "lm" "pcr" "spcr") 
 # Array of imputation types
-imps=("em") # "none" "availcase")
+imps=("em" "none" "availcase")
 
 yearm_begin="1995-06"
 yearm_end="2020-12"
@@ -24,6 +23,7 @@ for mod in ${mods[@]}; do
                 --model=$mod \
                 --signal_file="${bcroot}bcsignals_${imp}.csv" \
                 --output_folder=$output_folder \
+                --outroot="/scratch/jpm2223/forecast/" \
                 --yearm_begin=$yearm_begin \
                 --yearm_end=$yearm_end
     done

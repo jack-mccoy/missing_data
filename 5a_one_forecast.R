@@ -1,5 +1,9 @@
 # 2023 02 trying ml stuff on chen-Zimmermann data
 
+# Necessary to point to tensorflow module when running on CBS grid
+if (Sys.info()["user"] == "jpm2223") {
+    reticulate::use_python("/user/jpm2223/.conda/envs/tf/bin/python")
+}
 #==============================================================================#
 # Setup ----
 #==============================================================================#
@@ -31,6 +35,9 @@ optcmd <- optparse::OptionParser(
     optparse::make_option(c("--output_folder"),
                           type = "character", default = 'auto',
                           help = "results go here.  use 'auto' to auto-generate"),
+    optparse::make_option(c("--outroot"), # need flexibility because of storage limits
+        type = "character", default = "../output/forecast/",
+        help = "root of output path"),
     optparse::make_option(c("--yearm_begin"),
                           type = "character", default = '1995-06',
                           help = "first in-sample end"),
@@ -53,7 +60,7 @@ opt = c(optcmd,
 )
 
 # output names
-outroot = '../output/forecast/'
+outroot = opt$outroot
 
 # keep this subset for testing, use NULL for keep all
 signals_keep = NULL # e.g. c('size','bm','mom12m')
