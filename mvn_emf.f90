@@ -19,7 +19,7 @@
 !     mu_new = mean(X)
 !     Sig_new = meanS + mu_new*mu_new'
 
-subroutine mvn_emf(X, mu, Sig, NAindex, tol, maxiter, K, N, update_mu)
+subroutine mvn_emf(X, mu, Sig, NAindex, tol, maxiter, K, N, mu_fixed)
 	
 implicit none
 
@@ -29,7 +29,7 @@ double precision X(N,K), mu(K), Sig(K,K)
 logical NAindex(N,K)
 double precision tol
 integer maxiter
-logical update_mu ! .true. updates mu in each iteration (default).  .false. uses inputted mu throughout.
+double precision mu_fixed(K)
 
 !declare other stuff
 integer i,j,iter,NAcount,info
@@ -41,7 +41,10 @@ double precision, allocatable :: eo_less_muo(:), em(:)
 double precision, allocatable :: Sig_oo(:,:), Sig_om(:,:), Vmm(:,:), invVooVom(:,:)
 
 !calculations start here
-write(*,'(A)') 'Starting EM:'
+open(1, file = 'mvn_emf.log', status = 'unknown')  
+write(1,'(A)') 'Starting EM:'
+
+
 
 !allocate first, because we always deallocate first in the loop
 allocate(eo_less_muo(1),em(1),Sig_oo(1,1),Sig_om(1,1),Vmm(1,1),invVooVom(1,1)) 
@@ -62,6 +65,10 @@ iterloop: do iter=1,maxiter
 
          ! S := Xi*Xi'
          call dgemm('N','T',K,K,1,1d0,e,K,e,K,1d0,S,K)          
+
+         write(1,*) 'S     ', S
+         write(1,*) 'e     ', e
+         write(1,*) 'Xi    ', X(i,:)
 
       elseif (NAcount == K) then          
          ! === no data ===
@@ -111,7 +118,7 @@ iterloop: do iter=1,maxiter
    			!    dgemm(TRA,TRB,M,     ,N       ,K       ,ALPHA,A       ,LDA      ,B  ,K        ,BETA,C ,LDC)
             Vmm = reshape(pack(Sig,thisNA2),(/NAcount,NAcount/))            
             call dgemm('T','N',NAcount,NAcount,K-NAcount,-1d0,invVooVom,K-NAcount,Sig_om,K-NAcount,1d0,Vmm,NAcount) 
-         end if		   
+         end if
 
          ! replace missing 1st moments with expectations
          ! em :=  mum + invVooVom'*eo_less_muo 
@@ -132,7 +139,7 @@ iterloop: do iter=1,maxiter
          ! finish second moment S := S+e*e'
          call dgemm('N','T',K,K,1,1d0,e,K,e,K,1d0,S,K) 
 
-      end if
+      end if ! NAcount
      
 	  
 	  ! update
@@ -142,29 +149,37 @@ iterloop: do iter=1,maxiter
 
    end do iloop
 
-   ! ==== update estimates (M-step) ====
-   
-   ! Update mean 
-   if ( update_mu ) then
-      do j=1,K
-         mu_new(j)=sum(X(:,j))/N
-	   end do
-   else
-      mu_new = mu
-   end if
+   ! ==== update estimates (M-step) ====   
+   ! Update mean    
+   do j=1,K
+      mu_new(j)=sum(X(:,j))/N
+   end do
+
+   ! don't update mu_fixed
+   write(1,*) 'old ', mu
+   write(1,*) 'new ', mu_new
+   write(1,*) 'fix ', mu_fixed
+
+   ! mu_new = mu_new * (1-mu_fixed) + mu * mu_fixed
+
+   write(1,*) 'upd ', mu_new
    
    ! Update covariance
    ! Sig_new := meanS - mu_new*mu_new'
    ! Netlib Notation:
    ! C :=beta*C + alf*oA(A)*oB(B) 
-   !          oA  oB  M N K  alf A    DA B  DB beta C   DC
+   !          oA  oB  M N K  alf  A    DA   B   DB beta    C  DC
    Sig_new=meanS   
    call dgemm('N','T',K,K,1,-1d0,mu_new,K,mu_new,K,1d0,Sig_new,K) 
+
+   write(1,*) 'Sig     ', Sig
+   write(1,*) 'Sig_new ', Sig_new
+   write(1,*) 'meanS   ', meanS
 
    !check convergence
    mu_dist=maxval(abs(mu_new-mu))
    Sig_dist=maxval(abs(Sig_new-Sig))
-   write(*,'(A I4 A ES8.2)') 'iter ',iter,', dist=',max(mu_dist,Sig_dist)
+   write(1,'(A I4 A ES8.2)') 'iter ',iter,', dist=',max(mu_dist,Sig_dist)
    if ( mu_dist < tol .and. Sig_dist < tol ) then
       exit iterloop
    end if
@@ -175,14 +190,16 @@ end do iterloop
 
 !store results
 if (iter>=maxiter) then
-   write(*,'(A)') 'Reached maxiter'
+   write(1,'(A)') 'Reached maxiter'
 else
-   write(*,'(A)') 'Converged.'
+   write(1,'(A)') 'Converged.'
 end if
 
 maxiter=iter
 mu=mu_new
 Sig=Sig_new
+
+close(1)
 
 end
 
