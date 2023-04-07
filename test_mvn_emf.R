@@ -10,8 +10,8 @@ library(dplyr)
 set.seed(3)
 
 
-J = 2 # number of signals
-N = 10 # number of stocks
+J = 4 # number of signals
+N = 100 # number of stocks
 obs_frac = 1 # fraction observed
 
 # draw true parameters
@@ -58,13 +58,11 @@ R0 = diag(1,J,J)
 
   mu_fixed = 0*mu + 1
 
-  mu_fixed = 0*mu
-  mu_fixed[1] = 1
 
 
   
 out = mvn_emf(y, mu, R0, mu_fixed
-              , tol = 1e-6, maxiter = as.integer(2))
+              , tol = 1e-6, maxiter = as.integer(1000))
 out$maxiter
 
 
@@ -76,16 +74,25 @@ out$maxiter
 SigAC = cov(t(xobs), use = 'pairwise.complete.obs')
 
 
-err_em = (out$estR - Sig0)/Sig0
-err_ac = (SigAC - Sig0)/Sig0
+
+
+err_em = (out$estR - Sig0)
+err_ac = (SigAC - Sig0)
 
 as.numeric(mu0)
-round(out$estE)
+round(out$estE,2)
+
+# manual
+# tempmu = rowMeans(x)
+tempmu = mu
+meanS = x %*% t(x)/N
+Sigman = meanS  - tempmu %*% t(tempmu)
 
 
 Sig0
 out$estR
 SigAC
+Sigman
 
 qlist = c(0.25, 0.5, 0.75)
 
@@ -98,5 +105,13 @@ data.frame(
   )
 
 
+# x[, 1]
+# x[,1] %*% t(x[,1])
+# 
+# x[, 2]
+# x[,2] %*% t(x[,2])
 
-x[,1] %*% t(x[,1])
+
+
+
+

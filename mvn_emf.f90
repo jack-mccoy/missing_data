@@ -32,7 +32,7 @@ integer maxiter
 double precision mu_fixed(K)
 
 !declare other stuff
-integer i,j,iter,NAcount,info
+integer i,j,l,iter,NAcount,info
 double precision mu_new(K), Sig_new(K,K)
 double precision meanS(K,K), e(K), S(K,K)
 double precision Sig_dist, mu_dist
@@ -60,20 +60,17 @@ iterloop: do iter=1,maxiter
 
       NAcount=count(NAindex(i,:))
       if (NAcount == 0) then 
-         ! === complete data ===
-         e=X(i,:)
+         ! === complete data ===         
+         e=X(i,:)         
 
          ! S := Xi*Xi'
-         call dgemm('N','T',K,K,1,1d0,e,K,e,K,1d0,S,K)          
-
-         write(1,*) 'S     ', S
-         write(1,*) 'e     ', e
-         write(1,*) 'Xi    ', X(i,:)
+         S=0 
+         call dgemm('N','T',K,K,1 ,1d0  ,e,K,e,K,1d0 ,S,K)                   
 
       elseif (NAcount == K) then          
          ! === no data ===
          e=mu
-
+         
          ! S := Sig + mu*mu'
          S=Sig
          call dgemm('N','T',K,K,1,1d0,e,K,e,K,1d0,S,K) 
@@ -122,10 +119,8 @@ iterloop: do iter=1,maxiter
 
          ! replace missing 1st moments with expectations
          ! em :=  mum + invVooVom'*eo_less_muo 
-		   ! netlib notation: C := C + A**T*B
-		   !    dgemm(TRA,TRB,M,     ,N,K        ,ALPHA,A        ,LDA      ,B ,K        ,BETA,C ,LDC)
          em=pack(mu,thisNA)
-         eo_less_muo=pack(X(i,:)-mu,.not.thisNA) ! 
+         eo_less_muo=pack(X(i,:)-mu,.not.thisNA) 
          call dgemm('T','N',NAcount,1,K-NAcount,1d0  ,invVooVom,K-NAcount,eo_less_muo,K-NAcount,1d0 ,em,NAcount) 
 
 		   !	e (1 x K) combines observed data in X(i,:) with em
@@ -155,20 +150,17 @@ iterloop: do iter=1,maxiter
       mu_new(j)=sum(X(:,j))/N
    end do
 
-   ! don't update mu_fixed
+   ! don't update elements marked by mu_fixed
    write(1,*) 'old ', mu
    write(1,*) 'new ', mu_new
    write(1,*) 'fix ', mu_fixed
 
-   ! mu_new = mu_new * (1-mu_fixed) + mu * mu_fixed
+   mu_new = mu_new * (1-mu_fixed) + mu * mu_fixed
 
    write(1,*) 'upd ', mu_new
    
    ! Update covariance
    ! Sig_new := meanS - mu_new*mu_new'
-   ! Netlib Notation:
-   ! C :=beta*C + alf*oA(A)*oB(B) 
-   !          oA  oB  M N K  alf  A    DA   B   DB beta    C  DC
    Sig_new=meanS   
    call dgemm('N','T',K,K,1,-1d0,mu_new,K,mu_new,K,1d0,Sig_new,K) 
 
