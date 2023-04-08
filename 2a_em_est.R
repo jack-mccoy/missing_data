@@ -6,7 +6,6 @@
 library(car) # Box-Cox stuff
 library(data.table) # Standard data manipulation
 library(optparse) # Python-like option parsing
-library(RPostgres) # SQL query to WRDS
 library(zoo) # yearmon convention is nice to work with here
 
 #==============================================================================#
