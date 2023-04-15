@@ -8,6 +8,7 @@ library(data.table) # Standard data manipulation
 library(optparse) # Python-like option parsing
 library(RPostgres) # SQL query to WRDS
 library(zoo) # yearmon convention is nice to work with here
+library(tidyverse) # sorry Jack
 
 #==============================================================================#
 # Option parsing ----
@@ -45,8 +46,12 @@ option_list <- list(
         help = "fraction of total cores to use")    
 )
 
+  
 opt_parser <- optparse::OptionParser(option_list = option_list)
 opt <- optparse::parse_args(opt_parser)
+
+    # debug
+    opt$impute_vec = '../output/signals_20.txt'
 
 # Get the anomalies as a nice vector
 if (grepl("\\.txt", opt$impute_vec)) {
@@ -76,162 +81,78 @@ closeAllConnections()
 # Read in data ----
 #==============================================================================#
 
-# Read in the signals we want 
-signals <- fread("../data/signed_predictors_dl_wide.csv") 
-setnames(signals, colnames(signals), tolower(colnames(signals)))
-
-# Ease of use
-signals[, yyyymm := as.yearmon(as.Date(as.character(yyyymm*10 + 1), "%Y%m%d"))]
+# Read in the bc-transformed signals 
+bcsignals = fread('../output/bcsignals/bcsignals_none.csv') 
+bcsignals[ , yyyymm := as.yearmon(yyyymm)]  # careful with reading yearmon format from csv!
 
 # Filter to test data
-signals <- signals[yyyymm %in% yrmons]
+bcsignals <- bcsignals[yyyymm %in% yrmons, .SD, .SDcols = c("permno", "yyyymm", opt$impute_vec)]
 
-crsp_data <- fread("../data/crsp_data.csv")
-crsp_data[, yyyymm := as.yearmon(yyyymm)]
 
 #==============================================================================#
-# Ensure we have all good variables ----
+# AR1 Residuals ----
 #==============================================================================#
 
-signals <- merge(signals, crsp_data, by = c("permno", "yyyymm"))
+ar1_grouping = c('signalname') # grouping for ar1 model
 
-# A safety check to make sure we don't have any signals with a month of <2 obs
-signals_good <- names(which(sapply( # `which` filters out the `FALSE` results
-    signals[,
-        lapply(.SD, function(x) { # has at least two unique observations
-            sum(!is.na(x), na.rm = T) >= 2 & length(unique(x[!is.na(x)])) > 2
-        }),
-        .SDcols = opt$impute_vec, # the candidate list we passed in
-        by = yyyymm # for each year-month
-    ][, 
-        !c("yyyymm") # don't want to check this column
-    ], 
-    all # and then check that it holds for all months
-)))
+# reshape to long
+bclong = bcsignals %>% 
+  pivot_longer(
+    cols = !c('permno','yyyymm'), names_to = 'signalname'
+  ) %>% 
+  arrange(signalname, permno, yyyymm, ) %>% 
+  setDT()
 
-# select to those variables
-signals <- signals[, .SD, .SDcols = c("permno", "yyyymm", signals_good)]
+bclong[
+  order(signalname, permno , yyyymm)
+  , lag_value := shift(value, type = 'lag')
+  , by = c('signalname', 'permno')
+]
 
-# Memory
-rm(crsp_data)
+# estimate AR1
+ar1_param = bclong[ 
+  , list(
+    ar1_slope = coef(lm(value ~ 0 + lag_value))[1]
+  )
+  , by = ar1_grouping
+]
 
-# For checking in log
-cat("There are a total of", length(signals_good), "signals with enough data.\n")
-print(signals_good)
+# find residuals
+bclong = bclong %>% left_join(ar1_param, by = ar1_grouping) %>% 
+  mutate(
+    ar1_pred = lag_value*ar1_slope
+    , ar1_resid = value - ar1_pred
+  )
 
-print(head(signals))
 
-#==============================================================================#
-# Box-Cox transformations and scaling ----
-#==============================================================================#
+# reshape back to wide
+bcsignals = bclong %>% select(permno,yyyymm,signalname,ar1_resid) %>% 
+  pivot_wider(names_from = signalname, values_from = ar1_resid) %>% 
+  setDT()
 
-# Get vector of time periods to run through 
-# (ensuring that we're only using yrmons in dataset)
-yrmons <- unique(signals$yyyymm)
-yrmons <- yrmons[order(yrmons)]
-
-# Run the Box-Cox transformations ----
-
-start_b <- Sys.time()
-
-ncores = floor(parallel::detectCores()*opt$cores_frac)
-doParallel::registerDoParallel(cores = parallel::detectCores())
-
-bctrans <- foreach::"%dopar%"(foreach::foreach(
-  i = yrmons, .packages = c('data.table','zoo')
-  ), {
-
-    cat("Box-Cox transformations for", as.character(i), "\n")
-
-    # Edit data for given month
-    transformed <- signals[yyyymm == i][,
-        (signals_good) := lapply(.SD, function(x) {
-          tryCatch(
-            {
-                if (opt$boxcox) {
-                    x <- winsorize(x, tail = 0.005) # 1% symmetric winsorization
-                    params <- car::powerTransform(x, family = "bcnPower")
-                    x <- scale(car::bcnPower(x, 
-                        lambda = params$lambda, gamma = params$gamma))
-                    attributes(x) <- c(attributes(x), 
-                          list(
-                              'bcn:lambda' = params$lambda,
-                              'bcn:gamma' = params$gamma)
-                          )
-                } else {
-                    x <- scale(winsorize(x, tail = 0.005))
-                    attributes(x) <- c(attributes(x), 
-                        list('bcn:lambda' = NA, 'bcn:gamma' = NA))
-                }
-                return(x)
-            }, # if can't transform, just scale and winsor
-            error = function(e) {
-                warning("A column did not get BC-transformed for ",
-                    as.character(i), " but BC transformation was specified")
-                x <- scale(winsorize(x, tail = 0.005))
-                attributes(x) <- c(attributes(x), 
-                    list('bcn:lambda' = NA, 'bcn:gamma' = NA))
-                return(x)
-            }
-          )
-        }),
-        .SDcols = signals_good
-    ][, # Remove the permno and yyyymm columns
-        .SD,
-        .SDcols = signals_good
-    ]
-
-    ## Getting the parameters to CSV to undo Box-Cox and scaling later ----
-
-    params <- transformed[, lapply(.SD, function(x) {
-        do.call("c", attributes(x))[c( # to ensure order consistency
-            "scaled:center",
-            "scaled:scale", 
-            "bcn:lambda", 
-            "bcn:gamma"
-        )]
-    })][, param := c( # Label the parameters in the data
-        "scaled:center",
-        "scaled:scale", 
-        "bcn:lambda", 
-        "bcn:gamma"
-    )]
-
-    # Each month gets its own CSV with 3 columns: param, variable, and value
-    fwrite(melt(params, id.vars = "param"),
-        paste0(opt$out_path, "bcn_scale_", gsub("[[:space:]]", "", 
-            as.character(i)), ".csv"))
-
-    return(transformed)
-
-})
-
-names(bctrans) <- as.character(yrmons)
-
-# Timing for the log
-end_b <- Sys.time()
-bc_time <- difftime(end_b, start_b, unit = "mins")
-cat("Box-Cox run time:", bc_time, "minutes\n")
-
-# Memory
-rm(signals)
 
 #==============================================================================#
 # Imputation parameter estimates ----
 #==============================================================================#
+  
+  # DEBUG
+  yrmons = max(bcsignals$yyyymm)
+  i = yrmons
 
 # Timing for the log
 start_i <- Sys.time()
 
-imp_par <- foreach::"%dopar%"(foreach::foreach(i = as.character(yrmons)), {
+# imp_par <- foreach::"%dopar%"(foreach::foreach(i = as.character(yrmons)), {
+  imp_par <- foreach::"%do%"(foreach::foreach(i = as.character(yrmons)), {  
 
     cat("Starting imputations for", i, "\n")
 
     ## Data prepping ----
+    bcsmall = bcsignals[ yyyymm == i , .SD, .SDcols = opt$impute_vec ]
 
-    good <- names(checkMinObs(bctrans[[i]], min_obs = 2)) # Get cols we can use
-    na_sort <- do.call("order", as.data.frame(-is.na(bctrans[[i]]))) #Sort by NA
-    raw_i <- as.matrix(bctrans[[i]][na_sort, .SD, .SDcols = good]) # Final mat
+    good <- names(checkMinObs(bcsmall, min_obs = 2)) # Get cols we can use
+    na_sort <- do.call("order", as.data.frame(-is.na(bcsmall))) #Sort by NA
+    raw_i <- as.matrix(bcsmall[na_sort, .SD, .SDcols = good]) # Final mat
 
     # Initialize mean and cov matrix
     #   enforce 0s on diagonal, as in the norm2 package
