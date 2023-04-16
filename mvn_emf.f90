@@ -9,8 +9,10 @@
 !	NAindex = indexes of missing values
 
 subroutine mvn_emf(Ey, estE, estR, NAindex, tol, maxiter, K, N, update_estE)
-	
+use ieee_arithmetic
+   
 implicit none
+
 
 !declare input arguments	
 integer K,N
@@ -30,7 +32,8 @@ double precision, allocatable :: E1(:), E2(:)
 double precision, allocatable :: R11(:,:), R12(:,:), R22(:,:), invR11R12(:,:)
 
 !calculations start here
-write(*,'(A)') 'Starting EM:'
+open(1, file = 'mvn_emf.log', status = 'unknown')  
+write(1,'(A)') 'Starting EM:'
 
 !allocate first, because we always deallocate first in the loop
 allocate(E1(1),E2(1),R11(1,1),R12(1,1),R22(1,1),invR11R12(1,1)) 
@@ -155,7 +158,15 @@ iterloop: do iter=1,maxiter
    !check convergence
    Edist=maxval(abs(Enew-estE))
    Rdist=maxval(abs(Rnew-estR))
-   write(*,'(A I4 A ES8.2)') 'iter ',iter,', dist=',max(Edist,Rdist)
+   write(1,'(A I4 A ES8.2)') 'iter ',iter,', dist=',max(Edist,Rdist)
+
+   if (max(Edist,Rdist) > 1e10) then
+      write(1,'(A)') 'ERROR, DIVERGING'
+      Enew = ieee_value(Enew, ieee_quiet_nan)
+      Rnew = ieee_value(Rnew, ieee_quiet_nan)
+      exit iterloop
+   end if
+
    if ( Edist < tol .and. Rdist < tol ) then
       exit iterloop
    end if
@@ -165,15 +176,19 @@ iterloop: do iter=1,maxiter
 end do iterloop
 
 !store results
-if (iter>=maxiter) then
-   write(*,'(A)') 'Reached maxiter'
+if (max(Edist,Rdist) > 1e10) then
+   write(1,'(A)') 'ERROR: Diverged'
+else if (iter>=maxiter) then
+   write(1,'(A)') 'ERROR: Reached maxiter'
 else
-   write(*,'(A)') 'Converged.'
+   write(1,'(A)') 'Converged.'
 end if
 
 maxiter=iter
 estE=Enew
 estR=Rnew
+
+close(1)
 
 end
 
