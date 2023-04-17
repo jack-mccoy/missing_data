@@ -13,6 +13,7 @@ for (year_cur in 1985:2020){
   runme = paste0(
     'Rscript 2a_ar1_em_est.R'
     , ' --em_type=', 'ar1'
+    , ' --output_ts_pred=', TRUE # output the ts prediction for analysis
     , ' --impute_yr=', year_cur
     , ' --impute_vec=', '../output/signals.txt'
     , ' --ar1_sample_length=60'
@@ -26,14 +27,14 @@ for (year_cur in 1985:2020){
 }
 
 # and bind
-shell(
-  'Rscript 2b_bind_em_years.R --big_file_name=bcsignals_emar1.csv'
-)
+runme = paste0('Rscript 2b_bind_em_years.R '
+    , '--big_file_name=bcsignals_emar1.csv '
+    , '--ts_file_name=ts_prediction_ar1.csv')
+shell(runme)
 
 
 
 # run regular em ----------------------------------------------------------
-
 
 
 unlink("../output/em_intermediate/", recursive = T, force = T) # first clean up
@@ -42,6 +43,7 @@ for (year_cur in 1985:2020){
   runme = paste0(
     'Rscript 2a_ar1_em_est.R'
     , ' --em_type=', 'regular'
+    , ' --output_ts_pred=', FALSE    
     , ' --impute_yr=', year_cur
     , ' --impute_vec=', '../output/signals.txt'
     , ' --ar1_sample_length=1'

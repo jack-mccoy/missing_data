@@ -10,6 +10,9 @@ option_list <- list(
   optparse::make_option(c("--big_file_name"),
                         type = "character", default = "bcsignals_em.csv",
                         help = "bcsignals_em.csv or bcsignals_emar1.csv")
+  , optparse::make_option(c("--ts_file_name"),
+                        type = "character", default = "ts_prediction_em.csv",
+                        help = "optional, name of ts prediction file name")  
 )
 
 
@@ -17,10 +20,8 @@ opt_parser <- optparse::OptionParser(option_list = option_list)
 opt <- optparse::parse_args(opt_parser)
 
 
-# do stuff -------------------------------------------------------------------------
-
+# bind emar1 annual csvs and save -------------------------------------------------------------------------
 library(data.table)
-
 
 # read in many csv files
 csv.list = list.files(
@@ -36,6 +37,28 @@ bcsignals_emar1 = rbindlist(lst)
 fwrite(bcsignals_emar1
        , paste0('../output/bcsignals/', opt$big_file_name)
        )
+
+# bind ts prediction annual csvs and save -------------------------------------------------------------------------
+# (only if they exist)
+
+# read in many csv files
+ts.list = list.files(
+  '../output/em_intermediate/', pattern = 'ts_prediction_'
+  , full.names = T
+)
+
+if (length(ts.list)>0){
+  
+  lst <- lapply(ts.list, fread)
+  
+  # bind together and write
+  ts_prediction = rbindlist(lst)
+  
+  fwrite(ts_prediction
+         , paste0('../output/bcsignals/', opt$ts_file_name)
+  )
+  
+} # if (length(ts.lst)>0)
 
 
 # check ------------------------------------------------------------------
@@ -53,15 +76,3 @@ bcsignals_emar1[
 ]
 
 
-# -------------------------------------------------------------------------
-
-
-temp = signallist[6]
-
-temp
-
-bcsignals_emar1 %>% 
-  select(permno,yyyymm,all_of(temp)) %>% 
-  rename(x := !!temp) %>% 
-  filter(is.na(x)) %>% 
-  head()

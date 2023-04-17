@@ -20,8 +20,11 @@ library(tidyverse) # sorry Jack
 
 option_list <- list(
   optparse::make_option(c("--em_type"),
-                        type = "character", default = "regular",
+                        type = "character", default = "ar1",
                         help = "one of (regular, ar1)"),
+  optparse::make_option(c("--output_ts_pred"),
+                        type = "logical", default = FALSE,
+                        help = "output the prediction of time-series model?"),  
   optparse::make_option(c("--impute_yr"),
                         type = "numeric", 
                         default = 2015,
@@ -329,6 +332,14 @@ sink('../output/em_intermediate/readme.log')
 Sys.time()
 opt
 sink()
+
+if (opt$output_ts_pred){
+  ts_pred = bclong2 %>% select(permno,yyyymm,signalname,pred) %>% 
+    pivot_wider(names_from = signalname, values_from = pred) %>% 
+    arrange(permno,yyyymm) 
+  
+  fwrite(ts_pred, paste0('../output/em_intermediate/ts_prediction_',opt$impute_yr, '.csv' ))
+}
 
 #==============================================================================#
 # Sum stats for the console ----
