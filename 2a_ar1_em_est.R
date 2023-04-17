@@ -1,3 +1,5 @@
+# input: bcsignals_none.csv
+# output: many bcsignals_emar1_YYYY.csv files
 
 #==============================================================================#
 # Packages ----
@@ -17,6 +19,9 @@ library(tidyverse) # sorry Jack
 
 
 option_list <- list(
+  optparse::make_option(c("--em_type"),
+                        type = "character", default = "regular",
+                        help = "one of (regular, ar1)"),
   optparse::make_option(c("--impute_yr"),
                         type = "numeric", 
                         default = 2015,
@@ -46,9 +51,10 @@ option_list <- list(
 opt_parser <- optparse::OptionParser(option_list = option_list)
 opt <- optparse::parse_args(opt_parser)
 
-# debug
-opt$impute_vec = '../output/signals_75.txt'
-opt$cores_frac = 0.5
+# for consistency
+if (opt$em_type == 'regular'){
+  opt$ar1_sample_length = 1
+}
 
 # Get the anomalies as a nice vector
 if (grepl("\\.txt", opt$impute_vec)) {
@@ -108,74 +114,86 @@ bclong = bclong %>% left_join(signaldoc, by = c('signalname'))
 rm(bcsignals)
 
 #==============================================================================#
-# AR1 Residuals Function ----
+# AR1 Residuals, or Not ----
 #==============================================================================#
+# makes bclong2
 
-
-ar1_grouping = c('signalname') # grouping for ar1 model
-
-# prob don't want to parallelize this since it takes so much ram
-# bclong is roughly 5-10 gigs with 100 signals, so you really can't parallelize much anyway
-
-ar1long <- foreach::"%do%"(foreach::foreach(
-  i = yrmon_list,  .packages = c('data.table','zoo','tidyverse')
-  , .combine = rbind
-), {
+if (opt$em_type == 'regular'){
+  # if EM type is regular, it's just an AR1 model with zero persistence.
   
-  print(paste0('running ar1 model for ', i))
+  bclong2 = bclong %>% select(-port_period) %>% 
+    mutate(pred = 0, resid = value) 
   
-  # don't look ahead
-  bclong2 = bclong[yyyymm >= i - opt$ar1_sample_length + 1  & yyyymm <= i]
+} else if (opt$em_type == 'ar1'){
+  # if EM type is ar1, run ar1 model to decompose value into pred and resid
   
-  # deal with signal update frequency
-  bclong2 = bclong2 %>% mutate(
-    mon = round(12*(yyyymm - floor(yyyymm))+1)
-  ) %>% 
-    filter(
-      port_period == 1 | (
-        port_period == 3 & mon %in%  (month(i) + 3*(-12:12))
-      ) | (
-        port_period == 6 & mon %in%  (month(i) + 6*(-12:12))
-      ) | (
-        port_period == 12 & mon %in%  (month(i) + 12*(-12:12))
+  # prob don't want to parallelize this since it takes so much ram
+  # bclong is roughly 5-10 gigs with 100 signals, so you really can't parallelize much anyway
+  bclong2 <- foreach::"%do%"(foreach::foreach(
+    i = yrmon_list,  .packages = c('data.table','zoo','tidyverse')
+    , .combine = rbind
+  ), {
+    
+    ar1_grouping = c('signalname') # grouping for ar1 model, hardcode for now
+    
+    print(paste0('running ar1 model for ', i))
+    
+    # don't look ahead
+    bctemp = bclong[yyyymm >= i - opt$ar1_sample_length + 1  & yyyymm <= i]
+    
+    # deal with signal update frequency
+    bctemp = bctemp %>% mutate(
+      mon = round(12*(yyyymm - floor(yyyymm))+1)
+    ) %>% 
+      filter(
+        port_period == 1 | (
+          port_period == 3 & mon %in%  (month(i) + 3*(-12:12))
+        ) | (
+          port_period == 6 & mon %in%  (month(i) + 6*(-12:12))
+        ) | (
+          port_period == 12 & mon %in%  (month(i) + 12*(-12:12))
+        )
+      ) %>% 
+      select(permno,yyyymm,signalname,value)
+    
+    # lag
+    bctemp[
+      order(signalname, permno , yyyymm)
+      , lag_value := shift(value, type = 'lag')
+      , by = c('signalname', 'permno')
+    ]
+    
+    # estimate AR1
+    ar1_param = bctemp[ 
+      , list(
+        ar1_slope = coef(lm(value ~ 0 + lag_value))[1]
       )
-    ) %>% 
-    select(permno,yyyymm,signalname,value)
+      , by = ar1_grouping
+    ]
+    
+    # make xs for current month i
+    xs = bctemp[yyyymm == i] %>% left_join(ar1_param, by = ar1_grouping) %>% 
+      mutate(
+        pred = lag_value*ar1_slope
+        , resid = value - pred
+      ) %>% 
+      # if there's no data, the model says E(signal) = 0
+      mutate(
+        pred = if_else(is.na(pred), 0, pred)
+      ) %>% 
+      select(permno, yyyymm, signalname, value, pred, resid)
+    
+    return(xs)
+    
+  })
   
-  # lag
-  bclong2[
-    order(signalname, permno , yyyymm)
-    , lag_value := shift(value, type = 'lag')
-    , by = c('signalname', 'permno')
-  ]
+  rm(bctemp)
   
-  # estimate AR1
-  ar1_param = bclong2[ 
-    , list(
-      ar1_slope = coef(lm(value ~ 0 + lag_value))[1]
-    )
-    , by = ar1_grouping
-  ]
-  
-  # make xs for current month i
-  xs = bclong2[yyyymm == i] %>% left_join(ar1_param, by = ar1_grouping) %>% 
-    mutate(
-      pred = lag_value*ar1_slope
-      , resid = value - pred
-    ) %>% 
-    # if there's no data, the model says E(signal) = 0
-    mutate(
-      pred = if_else(is.na(pred), 0, pred)
-    ) %>% 
-    select(permno, yyyymm, signalname, value, pred, resid)
-  
-  return(xs)
+} # end if opt$em_type
 
-})
-
-# memory: bclong is ar1_sample_length/12 times as big as ar1long
+# memory: bclong can be really big if ar1_sample_length is long
 rm(bclong)
-rm(bclong2)
+
 
 
 #==============================================================================#
@@ -198,20 +216,20 @@ bcsignals_emar1 <- foreach::"%dopar%"(foreach::foreach(
   
   cat("Starting imputations for", as.character(i), "\n")
   
-  # turn ar1long into cross-sections
+  # turn bclong2 into cross-sections
   xs = list()
   
-  xs$resid = ar1long[yyyymm == i] %>% select(permno,yyyymm,signalname,resid) %>% 
+  xs$resid = bclong2[yyyymm == i] %>% select(permno,yyyymm,signalname,resid) %>% 
     pivot_wider(names_from = signalname, values_from = resid) %>% 
     arrange(permno) %>% 
     setDT()
   
-  xs$pred = ar1long[yyyymm == i] %>% select(permno,yyyymm,signalname,pred) %>% 
+  xs$pred = bclong2[yyyymm == i] %>% select(permno,yyyymm,signalname,pred) %>% 
     pivot_wider(names_from = signalname, values_from = pred) %>% 
     arrange(permno) %>%   
     setDT()
   
-  xs$obs = ar1long[yyyymm == i] %>% select(permno,yyyymm,signalname,value) %>% 
+  xs$obs = bclong2[yyyymm == i] %>% select(permno,yyyymm,signalname,value) %>% 
     pivot_wider(names_from = signalname, values_from = value) %>% 
     arrange(permno) %>%   
     setDT()
@@ -246,7 +264,7 @@ bcsignals_emar1 <- foreach::"%dopar%"(foreach::foreach(
   # output log file if no convergence
   if (em_out$maxiter >= opt$maxiter){
     sink('3b_ar1_em_est.err')
-    
+    Sys.time()
     print('ar1_em_est.R error: divergence')
     i
     opt$impute_vec
@@ -305,8 +323,12 @@ cat("Imputations for", opt$impute_yr, "ran in", imp_time, "minutes")
 # Save ----
 #==============================================================================#
 
-dir.create('../output/emar1_intermediate', showWarnings = F)
-fwrite(bcsignals_emar1, paste0('../output/emar1_intermediate/bcsignals_emar1_',opt$impute_yr, '.csv' ))
+dir.create('../output/em_intermediate', showWarnings = F)
+fwrite(bcsignals_emar1, paste0('../output/em_intermediate/bcsignals_emar1_',opt$impute_yr, '.csv' ))
+sink('../output/em_intermediate/readme.log')
+Sys.time()
+opt
+sink()
 
 #==============================================================================#
 # Sum stats for the console ----
