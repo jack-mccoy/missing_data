@@ -123,8 +123,8 @@ imp_pc <- foreach::"%dopar%"(foreach::foreach(i = yrmons), {
     
     # Back to data.table
     signals_i_imp <- data.table(
-        signals_i$permno,
-        signals_i$yyyymm,
+        permno = signals_i$permno,
+        yyyymm = signals_i$yyyymm,
         signals_i_mat
     )
 

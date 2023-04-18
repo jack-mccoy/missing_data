@@ -3,10 +3,11 @@
 # Array of model names
 mods=("keras1" "keras2" "keras3" "keras4" "keras5" "ranger" "lightgbm" "lm" "pcr" "spcr") 
 # Array of imputation types
-imps=("em" "none" "availcase")
+#imps=("em" "none" "availcase")
+imps=("ppca10" "ppca60")
 
 yearm_begin="1995-06"
-yearm_end="2020-12"
+yearm_end="2020-06"
 
 # Paths
 bcroot="/scratch/jpm2223/bcsignals/"
