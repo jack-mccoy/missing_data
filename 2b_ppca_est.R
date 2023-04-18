@@ -10,15 +10,16 @@ source('functions.R')
 # Option parsing
 #===============================================================================
 
-# Check if on cluster
-on_cluster <- Sys.getenv('SGE_TASK_ID') != ""
-
 # List of options passed as argments in shell
 option_list <- list(
-    optparse::make_option(c("--impute_yr"),
+    optparse::make_option(c("--start_yr"),
         type = "numeric", 
-        default = ifelse(on_cluster, as.integer(Sys.getenv("SGE_TASK_ID")), 1990),
-        help = "year of data to impute"),
+        default = 1985,
+        help = "start year of data to impute"),
+    optparse::make_option(c("--end_yr"),
+        type = "numeric", 
+        default = 2020,
+        help = "start year of data to impute"),
     optparse::make_option(c("--out_path"),
         type = "character", 
         default = "../output/impute_ests/",
@@ -32,9 +33,6 @@ option_list <- list(
     optparse::make_option(c("--n_pcs"),
         type = "numeric", default = 2,
         help = "number of principal components to estimate")
-    #optparse::make_option(c("--tol"),
-    #    type = "numeric", default = 1e-6,
-    #    help = "a numeric value for the convergence check")
 )
 
 opt_parser <- optparse::OptionParser(option_list = option_list)
@@ -51,7 +49,11 @@ if (grepl("\\.txt", opt$impute_vec)) {
 }
 
 # Years and months to impute
-yrmons <- zoo::as.yearmon(paste0(month.abb, " ", opt$impute_yr))
+yrmons <- seq(
+    as.yearmon(paste0('Jan ', opt$start_yr)),
+    as.yearmon(paste0('Dec ', opt$end_yr)),
+    by = 1/12 # monthly interval for yearmon class
+)
 
 #===============================================================================
 # Read in and set up data
@@ -98,6 +100,8 @@ print(head(signals))
 doParallel::registerDoParallel(cores = parallel::detectCores())
 
 imp_pc <- foreach::"%dopar%"(foreach::foreach(i = yrmons), {
+
+    cat(paste0('Starting PPCA imputations for ', i, '\n'))
     
     # Subset to this month
     signals_i <- signals[yyyymm == i]
@@ -124,6 +128,8 @@ imp_pc <- foreach::"%dopar%"(foreach::foreach(i = yrmons), {
         signals_i_mat
     )
 
+    cat(paste0('Finished PPCA imputations for ', i, '\n'))
+
     # Output
     return(signals_i_imp)
 
@@ -133,7 +139,9 @@ imp_pc <- foreach::"%dopar%"(foreach::foreach(i = yrmons), {
 # Combine the data and output
 #===============================================================================
 
+# Combine all the months into one file
 out_data <- rbindlist(imp_pc, fill = TRUE)
 
-fwrite(out_data, paste0(opt$out_path, "bcsignals_ppca_", opt$impute_yr, ".csv"))
+# Output
+fwrite(out_data, paste0(opt$out_path, "bcsignals_ppca", opt$n_pcs, ".csv"))
 
