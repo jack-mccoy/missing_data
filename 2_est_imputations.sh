@@ -2,16 +2,17 @@
 
 if [ $1 = "em" ]; then
     Rscript --grid_submit=batch \
-        --grid_SGE_TASK_ID=1987-2020 \
-        --grid_mem=40G \
+        --grid_SGE_TASK_ID=2006-2020 \
+        --grid_mem=50G \
         --grid_ncpus=12 \
         --grid_email="jmccoy26@gsb.columbia.edu" \
-        2a_em_est.R \
+        2a_ar1_em_est.R \
             --impute_vec="../output/signals_best125_1985.txt" \
+            --em_type="$2" \
             --maxiter=10000 \
-            --out_path="../output/impute_ests/" \
-            --tol=1e-4 \
-            --boxcox \
+            --out_path="/scratch/jpm2223/" \
+            --ar1_sample_length=60 \
+            --tol=1e-5 \
             -f
 fi
 
