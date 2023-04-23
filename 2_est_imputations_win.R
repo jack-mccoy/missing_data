@@ -3,6 +3,22 @@
 # not super happy with the unlink (force delete temporary files permanently) but oh well
 
 
+# tbc: ppca 
+
+
+# run bllp  ---------------------------------------------------------------
+
+# this should only take like one hour
+
+runme = paste0(
+  'Rscript 2d_bllp_imp.R'
+  , ' --num_PCs=', 6
+  , ' --out_path=', '../output/'
+  , ' --out_name=', 'bcsignals_bllp.csv'
+  , ' --impute_vec=', '../output/signals.txt'
+)
+
+shell(runme)
 
 # run ar1 em --------------------------------------------------------------
 
