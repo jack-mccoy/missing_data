@@ -1,5 +1,16 @@
+# Imputes data following Bryzgalova, Lettau, Lerner, Pelger 2023
+# The Backward-cross-section (B-XS) model, based on Appendix A
+
+# email from Markus Pelger April 17 2023
+# "All empirical results including the IPCA results are based on the
+# implementation described in Appendix A."
+
 # input: bcsignals_none.csv
-# output: many bcsignals_emar1_YYYY.csv files
+# output: bcsignals_bllp.csv
+
+# AC: Eq A.1 in BLLP is equivalent to a complete case regression of
+# signals on loadings across signalnames (by permno)
+# Seems too easy so I kept the sanity check in comments below
 
 #==============================================================================#
 # Packages ----
@@ -42,9 +53,8 @@ opt_parser <- optparse::OptionParser(option_list = option_list)
 opt <- optparse::parse_args(opt_parser)
 
 
-## debug -------------------------------------------------------------------
-
-opt$impute_vec = '../data/signals_best125_1985.txt'
+# ## debug -------------------------------------------------------------------
+# opt$impute_vec = '../data/signals_best125_1985.txt'
 
 
 # Get the anomalies as a nice vector
