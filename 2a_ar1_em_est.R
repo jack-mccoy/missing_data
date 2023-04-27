@@ -43,6 +43,9 @@ option_list <- list(
        type = "numeric", 
        default = 5,
        help = "Months to use in AR1 estimate"),  
+    optparse::make_option(c("--winsor_p"),
+       type = "numeric", default = 0,
+       help = "Winsorize the extreme p fraction of residuals (by month-signalname)"),      
     optparse::make_option(c("--maxiter"),
        type = "numeric", default = 2000,
        help = "a numeric value for the maximumum number of EM iterations"),
@@ -208,6 +211,21 @@ if (opt$em_type == 'regular'){
 # memory: bclong can be really big if ar1_sample_length is long
 rm(bclong)
 
+
+#==============================================================================#
+# Winsorize Residuals ----
+#==============================================================================#
+# ar1 model can make kurtosis even more extreme
+
+if (opt$winsor_p > 0){
+  bclong2[
+    , by = c('yyyymm','signalname')
+    , resid := winsorize(resid, tail = opt$winsor_p/2)
+  ][
+    , value := pred + resid
+  ]
+  
+} # end if opt$winsor_p > 0
 
 
 #==============================================================================#
