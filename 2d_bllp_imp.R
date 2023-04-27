@@ -47,7 +47,7 @@ option_list <- list(
                         help = "a comma-separated list of values or .txt file to scan"),
   optparse::make_option(c("--lag_max_years"),
                         type = "numeric", default = 2,
-                        help = "max num years to look back for 2nd stage"),  
+                        help = "max num years to look back for 2nd stage")
 )
 
 
@@ -64,6 +64,9 @@ if (grepl("\\.txt", opt$impute_vec)) {
        "to the `impute_vec` argument\n")
 }
 
+if (length(opt$impute_vec) <= opt$num_PCs){
+  stop('error num signals < num pcs ')
+}
 
 #==============================================================================#
 # Setup ----
@@ -112,9 +115,9 @@ impute_one_month = function(yearm_cur){
     pivot_longer(cols = !c('permno','yyyymm'), names_to = 'signalname') %>%
     arrange(permno,signalname,-yyyymm)
   
-  # keep only permnos with streversal this month
+  # keep only permnos with some data this month 
   permnolist = longdat %>% 
-    filter(yyyymm == yearm_cur & signalname == 'streversal' & !is.na(value))  %>% 
+    filter(yyyymm == yearm_cur & !is.na(value))  %>% 
     pull(permno)
   longdat = longdat %>% filter(permno %in% permnolist)
   
@@ -321,7 +324,6 @@ impute_one_month = function(yearm_cur){
 yearm_min = as.yearmon('1985-01')
 yearm_max = as.yearmon('2020-12')
 
-
 ymlist = bcsignals$yyyymm %>% unique()
 ymlist = ymlist[
   ymlist >= yearm_min & ymlist <= yearm_max
@@ -358,9 +360,18 @@ signallist = names(bcsignals_bllp)
 signallist = signallist[3:length(signallist)]
 
 
-bcsignals_bllp[
-  , lapply(.SD, sd)
+tempfun = function(x) sum(!is.na(x))
+tempsum = bcsignals_bllp[
+  , by = yyyymm
+  , lapply(.SD, tempfun)
   , .SDcols = signallist
-]
+] 
+
+tempsum %>% 
+  mutate(year = as.numeric(floor(yyyymm))) %>% 
+  group_by(year) %>% 
+  summarize(across(all_of(signallist), mean)) %>% 
+  arrange(year) %>% 
+  pivot_longer(cols = -year)
 
 
