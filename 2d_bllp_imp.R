@@ -43,24 +43,16 @@ option_list <- list(
                         type = "character", default = "bcsignals_bllp.csv",
                         help = "directory including input and output files"),  
   optparse::make_option(c("--impute_vec"),
-                        type = "character", default = "bm,mom6m",
+                        type = "character", default = "../data/signals_best125_1985.txt",
                         help = "a comma-separated list of values or .txt file to scan"),
   optparse::make_option(c("--lag_max_years"),
                         type = "numeric", default = 2,
                         help = "max num years to look back for 2nd stage"),  
-  optparse::make_option(c("--cores_frac"),
-                        type = "numeric", default = 1.0,
-                        help = "fraction of total cores to use")    
 )
 
 
 opt_parser <- optparse::OptionParser(option_list = option_list)
 opt <- optparse::parse_args(opt_parser)
-
-
-# ## debug -------------------------------------------------------------------
-# opt$impute_vec = '../data/signals_best125_1985.txt'
-
 
 # Get the anomalies as a nice vector
 if (grepl("\\.txt", opt$impute_vec)) {
@@ -71,8 +63,6 @@ if (grepl("\\.txt", opt$impute_vec)) {
   stop("It seems that you did not pass a .txt file or comma-separated list",
        "to the `impute_vec` argument\n")
 }
-
-
 
 
 #==============================================================================#
