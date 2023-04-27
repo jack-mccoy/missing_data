@@ -1,5 +1,5 @@
 # input: bcsignals_none.csv
-# output: many bcsignals_emar1_YYYY.csv files
+# output: many bcsignals_emar1_YYYY.csv files (temporary)
 
 #==============================================================================#
 # Packages ----
@@ -31,14 +31,17 @@ option_list <- list(
         help = "directory including input and output files"),
     optparse::make_option(c("--impute_yr"),
        type = "numeric", 
-        default = ifelse(on_cluster, as.integer(Sys.getenv("SGE_TASK_ID")), 2015),
+       default = ifelse(on_cluster, as.integer(Sys.getenv("SGE_TASK_ID")), 2015),
        help = "year of data to impute"),
+    optparse::make_option(c("--impute_months"),
+       type = "character", default = '1,2,3,4,5,6,7,8,9,10,11,12',
+       help = "months of data to impute"),    
     optparse::make_option(c("--impute_vec"),
        type = "character", default = "bm,mom6m",
        help = "a comma-separated list of values or .txt file to scan"),
     optparse::make_option(c("--ar1_sample_length"),
        type = "numeric", 
-       default = 60,
+       default = 5,
        help = "Months to use in AR1 estimate"),  
     optparse::make_option(c("--maxiter"),
        type = "numeric", default = 2000,
@@ -50,7 +53,7 @@ option_list <- list(
        type = "logical", default = FALSE, action = "store_true",
        help = "logical to override maxiter and run the EM procedure until it converges to tol"),
     optparse::make_option(c("--cores_frac"),
-       type = "numeric", default = 1.0,
+       type = "numeric", default = 0.5,
        help = "fraction of total cores to use")    
 )
 
@@ -63,6 +66,7 @@ if (opt$em_type == 'regular'){
   opt$ar1_sample_length = 1
 }
 
+
 # Get the anomalies as a nice vector
 if (grepl("\\.txt", opt$impute_vec)) {
   opt$impute_vec <- scan(opt$impute_vec, character())
@@ -73,14 +77,14 @@ if (grepl("\\.txt", opt$impute_vec)) {
        "to the `impute_vec` argument\n")
 }
 
+# convert impute_months to numeric
+opt$impute_months = as.numeric(strsplit(opt$impute_months, ',')[[1]])
+
 #==============================================================================#
 # Setup ----
 #==============================================================================#
 
 source("functions.R")
-
-# Months to impute
-yrmon_list <- zoo::as.yearmon(paste0(month.abb, " ", opt$impute_yr))
 
 closeAllConnections()
 
@@ -124,6 +128,9 @@ rm(bcsignals)
 # AR1 Residuals, or Not ----
 #==============================================================================#
 # makes bclong2
+
+# Months to impute
+yrmon_list <- as.yearmon(paste(opt$impute_yr, opt$impute_months, sep = '-'))
 
 if (opt$em_type == 'regular'){
   # if EM type is regular, it's just an AR1 model with zero persistence.
@@ -211,10 +218,10 @@ rm(bclong)
 # Timing for the log
 start_i <- Sys.time()
 
-
-ncores = floor(parallel::detectCores()*opt$cores_frac)
-doParallel::registerDoParallel(cores = ncores)
-
+if (opt$cores_frac > 0){
+  ncores = floor(parallel::detectCores()*opt$cores_frac)
+  doParallel::registerDoParallel(cores = ncores)
+}
 
 bcsignals_emar1 <- foreach::"%dopar%"(foreach::foreach(
   i = as.character(yrmon_list),  .packages = c('data.table','zoo','tidyverse')

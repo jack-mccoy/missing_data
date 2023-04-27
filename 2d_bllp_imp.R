@@ -330,16 +330,21 @@ ymlist = ymlist[
 ]
 
 
+
 tic = Sys.time()
 bcsignals_bllp = foreach(yearm_cur = ymlist, .combine = rbind) %do% {
+  
   print(paste0('bllp imputing yearm = ', yearm_cur))
+  
   impcur = impute_one_month(yearm_cur)
   toc = Sys.time()
-  print(toc - tic)
+  
+  min_per_month = as.numeric(toc-tic, units = 'mins') / which(yearm_cur == ymlist) 
+  min_remain = (length(ymlist) - which(yearm_cur == ymlist) ) * min_per_month
+  print(paste0('min remain = ', min_remain))
   
   return(impcur)
 }
-
 
 
 #==============================================================================#
@@ -367,11 +372,13 @@ tempsum = bcsignals_bllp[
   , .SDcols = signallist
 ] 
 
-tempsum %>% 
+temptab = tempsum %>% 
   mutate(year = as.numeric(floor(yyyymm))) %>% 
   group_by(year) %>% 
   summarize(across(all_of(signallist), mean)) %>% 
   arrange(year) %>% 
   pivot_longer(cols = -year)
+
+View(temptab)
 
 
