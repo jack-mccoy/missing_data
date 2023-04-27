@@ -12,6 +12,8 @@
 # signals on loadings across signalnames (by permno)
 # Seems too easy so I kept the sanity check in comments below
 
+# 12 seconds per month, about 90 minutes for the full data
+
 #==============================================================================#
 # Packages ----
 #==============================================================================#
@@ -43,6 +45,9 @@ option_list <- list(
   optparse::make_option(c("--impute_vec"),
                         type = "character", default = "bm,mom6m",
                         help = "a comma-separated list of values or .txt file to scan"),
+  optparse::make_option(c("--lag_max_years"),
+                        type = "numeric", default = 2,
+                        help = "max num years to look back for 2nd stage"),  
   optparse::make_option(c("--cores_frac"),
                         type = "numeric", default = 1.0,
                         help = "fraction of total cores to use")    
@@ -86,6 +91,19 @@ bcsignals = fread(paste0(opt$out_path, "bcsignals/bcsignals_none.csv"))
 bcsignals <- bcsignals[, .SD, .SDcols = c("permno", "yyyymm", opt$impute_vec)]
 bcsignals[ , yyyymm := as.yearmon(yyyymm)]  # careful with reading yearmon format from csv!
 
+# find signal update frequency
+signaldoc = fread('../data/SignalDoc.csv') %>% 
+  filter(Cat.Signal == 'Predictor') %>% 
+  transmute(signalname = tolower(Acronym)
+            , port_start = `Start Month`, port_period = `Portfolio Period`) %>% 
+  mutate(
+    port_start = ifelse(is.na(port_start), 6, port_start)
+    , port_period = ifelse(is.na(port_period), 1, port_period)
+    , port_period = pmin(port_period, 12)
+  ) %>% 
+  select(-port_start) # not used right now, let's be stingy
+
+
 
 #==============================================================================#
 # impute_one_month function ----
@@ -97,57 +115,71 @@ bcsignals[ , yyyymm := as.yearmon(yyyymm)]  # careful with reading yearmon forma
 impute_one_month = function(yearm_cur){
   
 
-  # set up ------------------------------------------------------------------
+  # set up real-time sample ------------------------------------------------------------------
+  
+  # crop months
+  longdat = bcsignals[yyyymm <= yearm_cur & yyyymm >= yearm_cur - opt$lag_max_years]%>% 
+    pivot_longer(cols = !c('permno','yyyymm'), names_to = 'signalname') %>%
+    arrange(permno,signalname,-yyyymm)
+  
+  # keep only permnos with streversal this month
+  permnolist = longdat %>% 
+    filter(yyyymm == yearm_cur & signalname == 'streversal' & !is.na(value))  %>% 
+    pull(permno)
+  longdat = longdat %>% filter(permno %in% permnolist)
+  
+  # keep only relevant rebalancing periods
+  longdat = longdat %>% 
+    left_join(signaldoc, by = 'signalname') %>% mutate(
+      mon = round(12*(yyyymm - floor(yyyymm))+1)
+    ) %>% 
+    filter(
+      port_period == 1 | (
+        port_period == 3 & mon %in%  (month(yearm_cur) + 3*(-12:12))
+      ) | (
+        port_period == 6 & mon %in%  (month(yearm_cur) + 6*(-12:12))
+      ) | (
+        port_period == 12 & mon %in%  (month(yearm_cur) + 12*(-12:12))
+      )
+    )
+  
+  # drop lags if missing (but keep all current rows, even if missing, this is important)
+  longdat = longdat %>% mutate(current_val = yyyymm==yearm_cur)  %>% 
+    filter(current_val | (!current_val & !is.na(value))) %>% 
+    arrange(permno,signalname,-yyyymm)
+  
+  # keep only the most recent 1 lag (hardcode 1 for now)
+  setDT(longdat) # group_by is slow
+  longdat[ , lagnum := seq(1,.N), by = c('permno','signalname','current_val')]
+  longdat = longdat[current_val | lagnum == 1]
+  longdat = longdat %>% 
+    pivot_wider(id_cols = c('permno','signalname'), names_from = 'current_val'
+                , values_from = value, names_prefix = 'current_') %>% 
+    transmute(permno,signalname, value = current_TRUE, lag = current_FALSE)
+  
+  # checks (see how often lags are observed if current is missing)
+  # might use this to look back further than 2 years
+  # longdat %>% mutate(obs = !is.na(value)) %>% group_by(obs) %>% summarize(frac_obs_lag = mean(!is.na(lag)))
 
-  
+  # find prelim loadings ----------------------------------------------------
+
   # current signal matrix
-  signalmat = bcsignals[yyyymm == yearm_cur] %>% select(-yyyymm) %>% select(-c(permno)) %>% 
+  signalmat = longdat %>% select(permno, signalname, value) %>%   
+    pivot_wider(id_cols = 'permno', names_from = signalname, values_from = value) %>%
+    select(-permno) %>% 
     as.matrix()
-  rownames(signalmat) = bcsignals[yyyymm == yearm_cur]$permno
-  
+
   cov_ac = cov(signalmat, use = 'pairwise.complete.obs')
-  
-    # # debug
-    # ibad = which(!complete.cases(cov_ac))[2]
-    # rownames(cov_ac)[ibad]
-    # which(is.na(cov_ac[ibad,]))
-    # 
-    # bcsignals[yyyymm == yearm_cur, .(permno,yyyymm,betatailrisk,firmagemom,ageipo)] %>% 
-    #   print(topn = 20)
-    # 
-    # bcsignals[yyyymm == yearm_cur, .(permno,yyyymm,betatailrisk,firmagemom,ageipo)] %>% 
-    #   summarize(cov(betatailrisk, firmagemom))
-    
-  
   
   # find preliminary loadings Lambda (num_signals x num_PCs)
   Lamtil = eigen(cov_ac)$vectors[ , 1:opt$num_PCs]
   rownames(Lamtil) = colnames(signalmat)
   colnames(Lamtil) = paste0('load', 1:opt$num_PCs)
+  Lamtil = data.table(signalname = rownames(Lamtil), Lamtil)    
   
-  
-  # make long data with permno, name, value, lag, loadings
-  temp1 = bcsignals[yyyymm == yearm_cur] %>% 
-    select(-yyyymm) %>% 
-    pivot_longer(cols = !c('permno')) %>% 
-    setDT() 
-  
-  temp2 = bcsignals[yyyymm == yearm_cur-1/12] %>% 
-    select(-yyyymm) %>% 
-    pivot_longer(cols = !c('permno')) %>% 
-    rename(lag = value) %>% 
-    setDT()
-  
-  longdat = temp1 %>% 
-    left_join(temp2, by = c('permno','name')) %>% 
-    rename(signalname = name) %>% 
-    left_join(
-      data.table(
-        signalname = rownames(Lamtil), Lamtil
-      )    
-      , by = 'signalname'
-    ) 
-  
+  # merge onto longdat
+  longdat = longdat %>% 
+    left_join(Lamtil, by = 'signalname')
   
   # find factors ---------------------------------------------------
   
@@ -156,7 +188,9 @@ impute_one_month = function(yearm_cur){
   # run complete case regression of signals on factor loadings by permno
   form = paste0("value ~ 0 + ", paste(paste0("load", 1:opt$num_PCs), collapse = "+")) %>% as.formula
   formulas <- list(form)
+  setDT(longdat)
   temp1 = longdat[
+    !is.na(value)
     , lapply(formulas, function(x) list(coef(lm(x, data=.SD))))
     , by=permno
   ]
@@ -210,13 +244,16 @@ impute_one_month = function(yearm_cur){
   
   # BLLP: B-XS model (no eqn number)
   
+  # merge on factor data
+  #   drops permnos if no factor data (less than two signals observed)
   temp = longdat[ , .(permno,signalname,value,lag)] %>% 
-    left_join(stockfac, by = 'permno')
+    inner_join(stockfac, by = 'permno') 
   
   # run (complete case) regression of signals on factors and lagged signal by signalname
   form = paste0("value ~ 0 + lag + ", paste(paste0("fac", 1:opt$num_PCs), collapse = "+")) %>% as.formula
   formulas <- list(form)
   temp2 = temp[
+    !is.na(value) & !is.na(lag)
     , lapply(formulas, function(x) list(coef(lm(x, data=.SD))))
     , by=signalname
   ]
@@ -236,7 +273,7 @@ impute_one_month = function(yearm_cur){
   ] %>% 
     left_join(stockfac, by = 'permno') %>% 
     mutate(
-      lag = ifelse(is.na(lag), 0, lag) # if lag is missing, assume zero, not sure how to do this
+      lag = ifelse(is.na(lag), 0, lag) # if lag is missing, assume lag is zero (not sure how handle this)
     )
   
   longcoef = copy(longdat)[
@@ -244,14 +281,20 @@ impute_one_month = function(yearm_cur){
   ] %>% 
     left_join(tscoef, by = 'signalname')
   
+  # multiply factors and coefficients
   temp1 = (longfac %>% select(-c(permno,signalname)) %>% as.matrix) *
     (longcoef %>% select(-c(permno,signalname)) %>% as.matrix)
   
+  # sum
   longdat$valuehat = rowSums(temp1)
   
+  # check
+  # ggplot(longdat[1:1000, ], aes(x=valuehat,y=value)) +geom_point() + geom_abline(slope = 1)
+  
   # make final data valueimp
-  # replace with NA if missing (not sure how to handle this)
+  # replace with 0 if value and valuehat are missing (not sure how to handle this)
   # can come up if a stock has only one observed signal
+  # (occurs about 10 percent of the time)
   longdat = longdat %>% 
     mutate(
       valueimp = case_when(
@@ -260,8 +303,8 @@ impute_one_month = function(yearm_cur){
         , T ~ 0
       )
     )
-  
-  
+
+  # make wide
   impcur = longdat %>% 
     select(permno, signalname, valueimp) %>% 
     pivot_wider(id_cols = permno, names_from = signalname, values_from = valueimp) %>% 
@@ -273,6 +316,7 @@ impute_one_month = function(yearm_cur){
   
   
 } # end imput_one_month
+
 
 
 
