@@ -285,7 +285,7 @@ impute_one_month = function(yearm_cur){
 
 # hard code
 yearm_min = as.yearmon('1985-01')
-yearm_max = as.yearmon('2020-12')
+yearm_max = as.yearmon('2020-11')
 
 
 ymlist = bcsignals$yyyymm %>% unique()
@@ -293,18 +293,28 @@ ymlist = ymlist[
   ymlist >= yearm_min & ymlist <= yearm_max
 ]
 
+#tic = Sys.time()
+#bcsignals_bllp = foreach(yearm_cur = ymlist, .combine = rbind) %do% {
+#  print(paste0('bllp imputing yearm = ', yearm_cur))
+#  impcur = impute_one_month(yearm_cur)
+#  toc = Sys.time()
+#  print(toc - tic)
+#  
+#  return(impcur)
+#}
 
-tic = Sys.time()
-bcsignals_bllp = foreach(yearm_cur = ymlist, .combine = rbind) %do% {
-  print(paste0('bllp imputing yearm = ', yearm_cur))
-  impcur = impute_one_month(yearm_cur)
-  toc = Sys.time()
-  print(toc - tic)
-  
-  return(impcur)
+tic <- Sys.time()
+bcsignals_bllp_list <- list()
+for (i in 1:length(ymlist)) {
+    yearm_cur <- ymlist[i]
+    print(paste0('bllp imputing yearm = ', yearm_cur))
+    impcur <- impute_one_month(yearm_cur)
+    toc <- Sys.time()
+    print(toc - tic)
+    bcsignals_bllp_list[[i]] <- impcur
 }
 
-
+bcsignals_bllp <- rbindlist(bcsignals_bllp_list)
 
 #==============================================================================#
 # write to disk ----

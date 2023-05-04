@@ -38,8 +38,8 @@ option_list <- list(
        help = "a comma-separated list of values or .txt file to scan"),
     optparse::make_option(c("--ar1_sample_length"),
        type = "numeric", 
-       default = 60,
-       help = "Months to use in AR1 estimate"),  
+       default = 5,
+       help = "Years to use in AR1 estimate"),  
     optparse::make_option(c("--maxiter"),
        type = "numeric", default = 2000,
        help = "a numeric value for the maximumum number of EM iterations"),
@@ -90,7 +90,7 @@ bcsignals[ , yyyymm := as.yearmon(yyyymm)]  # careful with reading yearmon forma
 
 # keep only selected signals and months needed for ar1 samples
 bcsignals <- bcsignals[
-  yyyymm >= as.yearmon(paste0(opt$impute_yr, '-01')) - opt$ar1_sample_length + 1 
+  yyyymm >= as.yearmon(paste0(opt$impute_yr, '-01')) - opt$ar1_sample_length + 1/12 
   & yyyymm <= as.yearmon(paste0(opt$impute_yr, '-12'))
   , .SD, .SDcols = c("permno", "yyyymm", opt$impute_vec)
 ]
@@ -146,7 +146,7 @@ if (opt$em_type == 'regular'){
     print(paste0('running ar1 model for ', i))
     
     # don't look ahead
-    bctemp = bclong[yyyymm >= i - opt$ar1_sample_length + 1  & yyyymm <= i]
+    bctemp = bclong[yyyymm >= i - opt$ar1_sample_length + 1/12  & yyyymm <= i]
     
     # deal with signal update frequency
     bctemp = bctemp %>% mutate(

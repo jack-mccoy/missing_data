@@ -21,6 +21,11 @@ pc_ret_path <- '../output/pcr_returns/'
 
 plot_path <- '../output/plots/'
 
+imp_names <- setNames(
+    c("EM Algo","Simple Mean","BLLP loc B-XS"),
+    c("em","mn","bllp")
+)
+
 #===============================================================================#
 # Pull in and format data ----
 #===============================================================================#
@@ -57,8 +62,14 @@ import_ret_csv <- function(cur_spec) {
         variable.name = 'weighting',
         value.name = 'ls_ret'
     )
+    ret[, weighting := gsub("ew_ls", "Equal", weighting)]
+    ret[, weighting := gsub("vw_ls", "Value", weighting)]
     ret$forecast <- cur_spec$forecast
-    ret$imp <- cur_spec$imp
+    if (cur_spec$imp %in% names(imp_names)) { 
+        ret$imp <- imp_names[cur_spec$imp]
+    } else {
+        ret$imp <- cur_spec$imp
+    }
     return(ret)
 }
 
@@ -93,7 +104,11 @@ sum_data <- reg_data[,
         vol = sd(ls_ret)*sqrt(12)
     ),
     by = c('forecast', 'imp', 'pc', 'weighting')
+][
+    imp %in% imp_names
 ]
+
+sum_data[, imp := factor(imp, levels = imp_names)]
 
 #===============================================================================#
 # Plots
@@ -107,21 +122,28 @@ fore_list <- unique(sum_data$forecast)
 imp_list <- unique(sum_data$imp)
 
 for (cur_fore in fore_list) {
+
+    if (cur_fore == "pca") {
+        pos <- c(25,85)/100
+    } else {
+        pos <- c(70, 63)/100
+    }
   
   # All the line plots will have same basic look
     plot_base <- ggplot(sum_data[forecast == cur_fore], 
             aes(x = pc, colour = weighting, linetype = imp)) + 
         theme_bw() + 
         theme(
-            legend.position = c(27, 85)/100,
+            legend.position = pos,
             legend.background = element_blank(),
             legend.key = element_blank(),
-            legend.spacing.y = unit(0.01, 'cm'),
-            legend.spacing.x = unit(0.2, 'cm'),
+            legend.spacing.y = unit(0.005, 'cm'),
+            legend.spacing.x = unit(0.1, 'cm'),
             legend.box = 'horizontal',
-            legend.key.size = unit(0.4, 'cm'),
-            legend.text = element_text(size = 8),
-            legend.title = element_text(size = 9)
+            legend.key.width = unit(0.55, 'cm'),
+            legend.key.height = unit(0.38, 'cm'),
+            legend.text = element_text(size = 7),
+            legend.title = element_text(size = 8)
         ) + 
         labs(
           colour = "Stock Weights",
@@ -132,16 +154,18 @@ for (cur_fore in fore_list) {
           colour = guide_legend(order = 1),
           linetype = guide_legend(order = 2)
         ) +
-        #scale_linetype_manual(values = c('solid', 'longdash', 'dotted')) +
-        #scale_size_manual(values = c(0.8, 0.8, 0.5)) +
+        scale_linetype_manual(values = c('solid', 'longdash', 'dotted')) +
+        scale_size_manual(values = c(0.8, 0.8, 0.5)) +
         scale_color_manual(values = c(MATRED, MATBLUE))
   
     # Specific plots
     mn <- plot_base + geom_line(aes(y = rbar)) + 
+        scale_y_continuous(breaks = seq(10, 40, 10), limits=c(0,45)) +
         ylab("Annualized Mean Return (%)")
     stdev <- plot_base + geom_line(aes(y = vol)) +
         ylab("Annualized Std. Dev. (%)") 
     sharpe <- plot_base + geom_line(aes(y = sharpe)) + 
+        scale_y_continuous(breaks = seq(0.5, 2.5, 0.5), limits=c(0,2.75)) +
         ylab("Annualized Sharpe Ratio") 
     alpha_capm <- plot_base + geom_line(aes(y = alpha_capm)) +
         ylab('Annualized CAPM Alpha (%)')
@@ -166,65 +190,65 @@ for (cur_fore in fore_list) {
     
 }
 
-for (cur_imp in imp_list) {
-  
-  # All the line plots will have same basic look
-    plot_base <- ggplot(sum_data[imp == cur_imp], 
-            aes(x = pc, colour = weighting, linetype = forecast)) + 
-        theme_bw() + 
-        theme(
-            legend.position = c(27, 85)/100,
-            legend.background = element_blank(),
-            legend.key = element_blank(),
-            legend.spacing.y = unit(0.01, 'cm'),
-            legend.spacing.x = unit(0.2, 'cm'),
-            legend.box = 'horizontal',
-            legend.key.size = unit(0.4, 'cm'),
-            legend.text = element_text(size = 8),
-            legend.title = element_text(size = 9)
-        ) + 
-        labs(
-          colour = "Stock Weights",
-          linetype = "Forecast",
-          x = "Number of PCs"
-        ) +
-        guides(
-          colour = guide_legend(order = 1),
-          linetype = guide_legend(order = 2)
-        ) +
-        #scale_linetype_manual(values = c('solid', 'longdash', 'dotted')) +
-        #scale_size_manual(values = c(0.8, 0.8, 0.5)) +
-        scale_color_manual(values = c(MATRED, MATBLUE))
-  
-    # Specific plots
-    mn <- plot_base + geom_line(aes(y = rbar)) + 
-        ylab("Annualized Mean Return (%)")
-    stdev <- plot_base + geom_line(aes(y = vol)) +
-        ylab("Annualized Std. Dev. (%)") 
-    sharpe <- plot_base + geom_line(aes(y = sharpe)) + 
-        ylab("Annualized Sharpe Ratio") 
-    alpha_capm <- plot_base + geom_line(aes(y = alpha_capm)) +
-        ylab('Annualized CAPM Alpha (%)')
-    alpha_ff5 <- plot_base + geom_line(aes(y = alpha_ff5)) +
-        ylab('Annualized FF5 + Mom Alpha (%)')
-  
-    ggsave(plot = mn,
-        filename = paste0(plot_path, cur_imp, "_expected_rets.pdf"),
-        width = 8, height = 5, unit = "in", scale = scale_gg)
-  
-    ggsave(plot = sharpe, 
-        filename = paste0(plot_path, cur_imp, "_sharpes.pdf"),
-        width = 8, height = 5, unit = "in", scale = scale_gg)
-    
-    ggsave(plot = alpha_capm,
-        filename = paste0(plot_path, cur_imp, "_alpha_capm.pdf"),
-        width = 8, height = 5, unit = "in", scale = scale_gg)
-    
-    ggsave(plot = alpha_ff5, 
-        filename = paste0(plot_path, cur_imp, "_alpha_ff5_mom.pdf"),
-        width = 8, height = 5, unit = "in", scale = scale_gg)
-    
-}
+#for (cur_imp in imp_list) {
+#  
+#  # All the line plots will have same basic look
+#    plot_base <- ggplot(sum_data[imp == cur_imp], 
+#            aes(x = pc, colour = weighting, linetype = forecast)) + 
+#        theme_bw() + 
+#        theme(
+#            legend.position = c(27, 85)/100,
+#            legend.background = element_blank(),
+#            legend.key = element_blank(),
+#            legend.spacing.y = unit(0.01, 'cm'),
+#            legend.spacing.x = unit(0.2, 'cm'),
+#            legend.box = 'horizontal',
+#            legend.key.size = unit(0.4, 'cm'),
+#            legend.text = element_text(size = 8),
+#            legend.title = element_text(size = 9)
+#        ) + 
+#        labs(
+#          colour = "Stock Weights",
+#          linetype = "Forecast",
+#          x = "Number of PCs"
+#        ) +
+#        guides(
+#          colour = guide_legend(order = 1),
+#          linetype = guide_legend(order = 2)
+#        ) +
+#        #scale_linetype_manual(values = c('solid', 'longdash', 'dotted')) +
+#        #scale_size_manual(values = c(0.8, 0.8, 0.5)) +
+#        scale_color_manual(values = c(MATRED, MATBLUE))
+#  
+#    # Specific plots
+#    mn <- plot_base + geom_line(aes(y = rbar)) + 
+#        ylab("Annualized Mean Return (%)")
+#    stdev <- plot_base + geom_line(aes(y = vol)) +
+#        ylab("Annualized Std. Dev. (%)") 
+#    sharpe <- plot_base + geom_line(aes(y = sharpe)) + 
+#        ylab("Annualized Sharpe Ratio") 
+#    alpha_capm <- plot_base + geom_line(aes(y = alpha_capm)) +
+#        ylab('Annualized CAPM Alpha (%)')
+#    alpha_ff5 <- plot_base + geom_line(aes(y = alpha_ff5)) +
+#        ylab('Annualized FF5 + Mom Alpha (%)')
+#  
+#    ggsave(plot = mn,
+#        filename = paste0(plot_path, cur_imp, "_expected_rets.pdf"),
+#        width = 8, height = 5, unit = "in", scale = scale_gg)
+#  
+#    ggsave(plot = sharpe, 
+#        filename = paste0(plot_path, cur_imp, "_sharpes.pdf"),
+#        width = 8, height = 5, unit = "in", scale = scale_gg)
+#    
+#    ggsave(plot = alpha_capm,
+#        filename = paste0(plot_path, cur_imp, "_alpha_capm.pdf"),
+#        width = 8, height = 5, unit = "in", scale = scale_gg)
+#    
+#    ggsave(plot = alpha_ff5, 
+#        filename = paste0(plot_path, cur_imp, "_alpha_ff5_mom.pdf"),
+#        width = 8, height = 5, unit = "in", scale = scale_gg)
+#    
+#}
 
 
 # Cumulative returns over time ----

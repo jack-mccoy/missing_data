@@ -1,10 +1,9 @@
 #/bin/bash
 
 # Array of model names
-mods=("keras1" "keras2" "keras3" "keras4" "keras5" "ranger" "lightgbm" "lm" "pcr" "spcr") 
+mods=("keras1" "keras2" "keras3" "keras4" "keras5" "lightgbm" "lm" "pcr" "spcr") 
 # Array of imputation types
-#imps=("em" "none" "availcase")
-imps=("ppca10" "ppca60")
+imps=("em" "none" "availcase" "ppca10" "ppca60" "bllp" "emar1")
 
 yearm_begin="1995-06"
 yearm_end="2020-06"
