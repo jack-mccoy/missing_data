@@ -121,66 +121,15 @@ obs = obs %>% select(permno,yyyymm,all_of(mostobs1985$signalname))
 # Final lists of signals ----
 #==============================================================================#
 
-
-
-## find lists ----
-list_1985 = nobs_by_signal %>% 
-  filter(year(yyyymm) == 1985) %>% 
-  filter(!signalname %in% list_gap) %>%   
-  group_by(signalname) %>% 
-  summarize(
-    mean_pct_obs = mean(pct_obs)
-  ) %>% 
-  arrange(-mean_pct_obs) %>% 
-  mutate(
-    rank = row_number()
-    , best100 = if_else(row_number() <= 100, 1, 0)
-  ) %>% 
-  select(signalname, mean_pct_obs, rank, best100)  %>% 
-  print(n=2000)
-
-list_full = nobs_by_signal %>% 
-  filter(yyyymm >= date_start, yyyymm <= date_end) %>% 
-  filter(!signalname %in% list_gap) %>%     
-  group_by(signalname) %>% 
-  summarize(
-    mean_pct_obs = mean(pct_obs)
-  ) %>% 
-  arrange(-mean_pct_obs) %>% 
-  mutate(
-    rank = row_number()
-    , best100 = if_else(row_number() <= 100, 1, 0)
-  ) %>% 
-  select(signalname, mean_pct_obs, rank, best100) %>% 
-  print(n=2000)
-
-
 # merge to documentation for checking and tables (add more info later)
 signaldoc2 = signaldoc %>% 
-  inner_join(list_1985 %>% transmute(signalname, pct_obs_1985 = mean_pct_obs, rank1985 = rank) ) %>% 
-  inner_join(list_full %>% transmute(signalname, pct_obs_full = mean_pct_obs, rankfull = rank) )
+  inner_join(mostobs1985 %>% transmute(signalname, pct_obs_1985 = mean_pct_obs, rank1985 = rank) ) %>% 
+  arrange(rank1985)
   
-
-## output ----
 writeLines(
-  signaldoc2 %>% filter(rank1985 <= 100) %>% pull(signalname)
-  , '../data/signals_best100_1985.txt'
-)
-
-writeLines(
-  signaldoc2 %>% filter(rank1985 <= 125) %>% pull(signalname)
+  signaldoc2 %>% filter(rank1985 <= 125) %>% pull(signalname) 
   , '../data/signals_best125_1985.txt'
 )
-
-
-# these have lookahead bias, but it's helpful to know
-writeLines(
-  signaldoc2 %>% filter(rankfull <= 100) %>% pull(signalname)
-  , '../data/signals_best100_full.txt'
-)
-
-
-write.csv(signaldoc2, '../data/signals_best_doc.csv', row.names = F)
 
 
 #==============================================================================#
@@ -220,45 +169,14 @@ print(outputtable1,
 #==============================================================================#
 
 
-## list signal names for examples  ----
-nobs_by_signal %>% 
-  filter(yyyymm == 'Jun 2000') %>% 
-  arrange(pct_obs)
-
-
-nobs_by_signal %>% 
-  filter(yyyymm == 'Jun 2000') %>% 
-  arrange(-pct_obs)
-
-nobs_by_signal %>% 
-  filter(yyyymm == 'Jun 2000') %>% 
-  filter(pct_obs <= 65, pct_obs >= 60)
 
 
 ## data coverage ----
-nsignalselect = 125
-
-datasum = signaldoc2  %>% group_by(Cat.Data) %>% summarize(nsignal_all = n())  %>% 
-  left_join(
-    signaldoc2 %>% filter(rank1985 <= nsignalselect) %>% group_by(Cat.Data) %>% summarize(nsignal_1985 = n()) 
-  ) %>% 
-  left_join(
-    signaldoc2 %>% filter(rankfull <= nsignalselect) %>% group_by(Cat.Data) %>% summarize(nsignal_full = n()) 
-  )   %>% 
-  mutate_at(vars(-c('Cat.Data')), ~replace_na(.,0)) %>% 
-  print(n=300)
+signaldoc2  %>% group_by(Cat.Data) %>% summarize(nsignal_1985 = n()) 
 
 ## economic coverage ----
-
-econsum = signaldoc2  %>% group_by(Cat.Economic) %>% summarize(nsignal_all = n())  %>% 
-  left_join(
-    signaldoc2 %>% filter(rank1985 <= nsignalselect) %>% group_by(Cat.Economic) %>% summarize(nsignal_1985 = n()) 
-  ) %>% 
-  left_join(
-    signaldoc2 %>% filter(rankfull <= nsignalselect) %>% group_by(Cat.Economic) %>% summarize(nsignal_full = n()) 
-  )   %>% 
-  mutate_at(vars(-c('Cat.Economic')), ~replace_na(.,0)) %>% 
-  print(n=300)
+signaldoc2  %>% group_by(Cat.Economic) %>% summarize(nsignal_1985 = n()) %>% 
+  print(n=50)
 
 ## select coverage ----
 
@@ -272,29 +190,15 @@ selectsignals = c(
 keysum = signaldoc2 %>% filter(signalname %in% selectsignals) %>% 
   select(signalname, starts_with('pct'), starts_with('rank')) %>% 
   arrange(rank1985) %>% 
-  print(n=nsignalselect) 
+  print(n=50) 
 
 
 
 ## analyst signals ----
 
-signaldoc %>% filter(Cat.Data == 'Analyst') %>% 
-  left_join(
-    list_1985
-  ) %>% 
-  select(signalname, mean_pct_obs, rank, best100) %>% 
-  filter(!is.na(rank)) %>% 
-  arrange(rank)
-
-## selected signal for intro ----
-
-signalname = 'announcementreturn'
-signaldoc[signalname == 'announcementreturn']
-
-temp = obs[yyyymm >= 1977 & yyyymm <= 1992, .(permno, yyyymm, announcementreturn)] 
-
-mean(temp$announcementreturn)
-
+signaldoc2 %>% filter(Cat.Data == 'Analyst') %>% 
+  select(signalname, pct_obs_1985, rank1985) %>% 
+  arrange(rank1985)
 
 
 #==============================================================================#
