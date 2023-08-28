@@ -42,3 +42,18 @@ if [ $1 = "bllp" ]; then
             --impute_vec="../data/signals_best125_1985.txt"
 fi
 
+if [ $1 = "adhoc" ]; then
+    Rscript --grid_submit=batch \
+        --grid_mem=500G \
+        --grid_ncpus=12 \
+        --grid_email="jmccoy26@gsb.columbia.edu" \
+        2e_adhoc_imps.R \
+            --impute_type="$2" \
+            --impute_vec="../data/signals_best125_1985.txt" \
+            --data_path="/scratch/jpm2223/bcsignals/" \
+            --sample_start_year=1985 \
+            --sample_end_year=2020 \
+            --cores_frac=1
+fi
+
+

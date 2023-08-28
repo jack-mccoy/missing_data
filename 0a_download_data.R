@@ -20,9 +20,11 @@ wrds_pass <- getPass::getPass("WRDS pass: ")
 wrds <- DBI::dbConnect(RPostgres::Postgres(),
     host = "wrds-pgdata.wharton.upenn.edu",
     db = "wrds",
-    port = 9737,
-    user = wrds_user, 
-    pass = wrds_pass)
+    port = 9737)
+    
+    #,
+    #user = wrds_user, 
+    #pass = wrds_pass)
 
 #==============================================================================#
 # Download CRSP ====
@@ -117,42 +119,43 @@ rm(ff5_mom)
 # Download Chen-Zimmermann Data ====
 #==============================================================================#
 
-## root of March 2022 release on Gdrive
-#pathRelease = 'https://drive.google.com/drive/folders/1O18scg9iBTiBaDiQFhoGxdn4FdsbMqGo'
-#
-#
-### dl signal documentation ====
-#target_dribble = pathRelease %>% drive_ls() %>% 
-#  filter(name=='SignalDoc.csv')
-#
-#drive_download(target_dribble, path = '../data/SignalDoc.csv', overwrite = T)
-#
-### dl signals (except the crsp ones) ====
-#
-## 2 gig dl, can take a few minutes
-## download
-#target_dribble = pathRelease %>% drive_ls() %>% 
-#  filter(name == 'Firm Level Characteristics') %>% drive_ls() %>% 
-#  filter(name == 'Full Sets') %>% drive_ls() %>% 
-#  filter(name == 'signed_predictors_dl_wide.zip') 
-#dl = drive_download(target_dribble, path = '../data/deleteme.zip', overwrite = T)
-#
-## unzip, clean up
-#unzip('../data/deleteme.zip', exdir = '../data')
-#file.remove('../data/deleteme.zip')
-#
-#
-### download ports ====
-## this is just for counting and making signal lists
-#target_dribble = pathRelease %>% drive_ls() %>% 
-#  filter(name == 'Portfolios') %>% drive_ls() %>% 
-#  filter(name == 'Full Sets OP') %>% drive_ls() %>% 
-#  filter(name == 'PredictorPortsFull.csv')
-#
-#drive_download(target_dribble, path = '../data/PredictorPortsFull.csv', overwrite = T)
-#
-## memory
-#rm(target_dribble, dl)
+# root of Aug 2023 release on Gdrive
+path_release <- "https://drive.google.com/drive/folders/1EP6oEabyZRamveGNyzYU0u6qJ-N43Qfq"
+
+# Allow non-interactive download
+drive_deauth()
+
+## dl signal documentation ====
+target_dribble = path_release %>% drive_ls() %>% 
+  filter(name=='SignalDoc.csv')
+
+drive_download(target_dribble, path = '../data/SignalDoc.csv', overwrite = T)
+
+## dl signals (except the crsp ones) ====
+
+# 2 gig dl, can take a few minutes
+# download
+target_dribble = path_release %>% drive_ls() %>% 
+  filter(name == 'Firm Level Characteristics') %>% drive_ls() %>% 
+  filter(name == 'Full Sets') %>% drive_ls() %>% 
+  filter(name == 'signed_predictors_dl_wide.zip') 
+dl = drive_download(target_dribble, path = '../data/deleteme.zip', overwrite = T)
+
+# unzip, clean up
+unzip('../data/deleteme.zip', exdir = '../data')
+file.remove('../data/deleteme.zip')
+
+# download ports ====
+# this is just for counting and making signal lists
+target_dribble = path_release %>% drive_ls() %>% 
+  filter(name == 'Portfolios') %>% drive_ls() %>% 
+  filter(name == 'Full Sets OP') %>% drive_ls() %>% 
+  filter(name == 'PredictorPortsFull.csv')
+
+drive_download(target_dribble, path = '../data/PredictorPortsFull.csv', overwrite = T)
+
+# memory
+rm(target_dribble, dl)
 
 #==============================================================================#
 # Filtering ====
