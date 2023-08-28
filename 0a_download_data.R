@@ -32,7 +32,7 @@ wrds <- DBI::dbConnect(RPostgres::Postgres(),
 
 crspm <- as.data.table(DBI::dbGetQuery(wrds, "
     SELECT a.permno, a.date, a.ret, a.shrout, a.prc, a.hsiccd, 
-        b.exchcd,
+        b.exchcd, b.shrcd,
         c.dlstcd, c.dlret   -- from delistings table
     FROM crsp.msf AS a
     LEFT JOIN crsp.msenames AS b
@@ -42,6 +42,9 @@ crspm <- as.data.table(DBI::dbGetQuery(wrds, "
     LEFT JOIN crsp.msedelist AS c
         ON a.permno=c.permno
         AND date_trunc('month', a.date) = date_trunc('month', c.dlstdt)
+    WHERE /* Standard share and exchange code filter */
+        b.shrcd IN (10, 11, 12) AND
+        b.exchcd IN (1, 2, 3)
 ;"))
 
 ## Delisting returns ----
@@ -108,41 +111,72 @@ DBI::dbDisconnect(wrds)
 
 fwrite(ff5_mom, "../data/ff5_factors.csv")
 
+rm(ff5_mom)
+
 #==============================================================================#
 # Download Chen-Zimmermann Data ====
 #==============================================================================#
 
-# root of March 2022 release on Gdrive
-pathRelease = 'https://drive.google.com/drive/folders/1O18scg9iBTiBaDiQFhoGxdn4FdsbMqGo'
+## root of March 2022 release on Gdrive
+#pathRelease = 'https://drive.google.com/drive/folders/1O18scg9iBTiBaDiQFhoGxdn4FdsbMqGo'
+#
+#
+### dl signal documentation ====
+#target_dribble = pathRelease %>% drive_ls() %>% 
+#  filter(name=='SignalDoc.csv')
+#
+#drive_download(target_dribble, path = '../data/SignalDoc.csv', overwrite = T)
+#
+### dl signals (except the crsp ones) ====
+#
+## 2 gig dl, can take a few minutes
+## download
+#target_dribble = pathRelease %>% drive_ls() %>% 
+#  filter(name == 'Firm Level Characteristics') %>% drive_ls() %>% 
+#  filter(name == 'Full Sets') %>% drive_ls() %>% 
+#  filter(name == 'signed_predictors_dl_wide.zip') 
+#dl = drive_download(target_dribble, path = '../data/deleteme.zip', overwrite = T)
+#
+## unzip, clean up
+#unzip('../data/deleteme.zip', exdir = '../data')
+#file.remove('../data/deleteme.zip')
+#
+#
+### download ports ====
+## this is just for counting and making signal lists
+#target_dribble = pathRelease %>% drive_ls() %>% 
+#  filter(name == 'Portfolios') %>% drive_ls() %>% 
+#  filter(name == 'Full Sets OP') %>% drive_ls() %>% 
+#  filter(name == 'PredictorPortsFull.csv')
+#
+#drive_download(target_dribble, path = '../data/PredictorPortsFull.csv', overwrite = T)
+#
+## memory
+#rm(target_dribble, dl)
 
+#==============================================================================#
+# Filtering ====
+#==============================================================================#
 
-## dl signal documentation ====
-target_dribble = pathRelease %>% drive_ls() %>% 
-  filter(name=='SignalDoc.csv')
+# Maximize memory
+gc()
 
-drive_download(target_dribble, path = '../data/SignalDoc.csv', overwrite = T)
+signals <- fread("../data/signed_predictors_dl_wide.csv")
 
-## dl signals (except the crsp ones) ====
+# For merging
+if (class(signals$yyyymm) != "yearmon") {
+    signals[, yyyymm := as.yearmon(as.character(yyyymm * 10 + 1), format = "%Y%m%d")]
+}
 
-# 2 gig dl, can take a few minutes
-# download
-target_dribble = pathRelease %>% drive_ls() %>% 
-  filter(name == 'Firm Level Characteristics') %>% drive_ls() %>% 
-  filter(name == 'Full Sets') %>% drive_ls() %>% 
-  filter(name == 'signed_predictors_dl_wide.zip') 
-dl = drive_download(target_dribble, path = '../data/deleteme.zip', overwrite = T)
+# merge in (the merge is the filter because it's an inner join by default)
+cat("Before share code filter, there are", nrow(signals), "observations",
+    "in the signals data set")
 
-# unzip, clean up
-unzip('../data/deleteme.zip', exdir = '../data')
-file.remove('../data/deleteme.zip')
+signals_filt <- merge(signals, crsp_final[, .(permno, yyyymm)], 
+    by = c("permno", "yyyymm")) 
 
+cat("After share code filter, there are", nrow(signals_filt), "observations",
+    "in the signals data set")
 
-## download ports ====
-# this is just for counting and making signal lists
-target_dribble = pathRelease %>% drive_ls() %>% 
-  filter(name == 'Portfolios') %>% drive_ls() %>% 
-  filter(name == 'Full Sets OP') %>% drive_ls() %>% 
-  filter(name == 'PredictorPortsFull.csv')
-
-drive_download(target_dribble, path = '../data/PredictorPortsFull.csv', overwrite = T)
+fwrite(signals_filt, "../data/signed_predictors_dl_wide_filtered.csv")
 

@@ -26,9 +26,9 @@ source("functions.R")
 ## read ----
 
 # Read in the downloadable signals 
-signals <- fread("../data/signed_predictors_dl_wide.csv") 
+signals <- fread("../data/signed_predictors_dl_wide_filtered.csv") 
 setnames(signals, colnames(signals), tolower(colnames(signals)))
-signals[, yyyymm := as.yearmon(as.Date(as.character(yyyymm*10 + 1), "%Y%m%d"))]
+signals[, yyyymm := as.yearmon(yyyymm)] # NOTE: data is pre-formatted now in 0a_download_data.R
 
 # merge on crsp predictors
 crsp_data <- fread("../data/crsp_data.csv")[, .SD, .SDcols = !c("ret", "me")]
@@ -130,7 +130,6 @@ writeLines(
   signaldoc2 %>% filter(rank1985 <= 125) %>% pull(signalname) 
   , '../data/signals_best125_1985.txt'
 )
-
 
 #==============================================================================#
 # Output lists of predictors ----

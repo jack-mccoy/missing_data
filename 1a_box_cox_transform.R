@@ -6,6 +6,7 @@
 #==============================================================================#
 
 library(dplyr)
+library(tidyr) # sadly
 library(zoo)
 
 source("functions.R")
@@ -53,11 +54,11 @@ if (grepl("\\.txt", opt$impute_vec)) {
 #==============================================================================#
 
 # Read in the signals we want 
-signals <- fread(paste0(opt$data_path, "signed_predictors_dl_wide.csv")) 
+signals <- fread(paste0(opt$data_path, "signed_predictors_dl_wide_filtered.csv")) 
 setnames(signals, colnames(signals), tolower(colnames(signals)))
 
 # Ease of use
-signals[, yyyymm := as.yearmon(as.Date(as.character(yyyymm*10 + 1), "%Y%m%d"))]
+signals[, yyyymm := as.yearmon(yyyymm)]
 
 # merge on crsp predictors
 crsp_data <- fread(paste0(opt$data_path, "crsp_data.csv"))
@@ -203,7 +204,6 @@ n_bc = bctrans[ , lapply(.SD, function(x) {sum(!is.na(x))})] %>%
 n_raw = signals[ , lapply(.SD, function(x) {sum(!is.na(x))})] %>% 
   pivot_longer(cols = everything(), values_to = 'n_raw') %>% 
   print(n= 100)
-
 
 n_raw %>% left_join(n_bc) %>% 
   mutate(diff = n_raw - n_boxcox) %>% 

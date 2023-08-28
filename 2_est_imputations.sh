@@ -7,7 +7,7 @@ if [ $1 = "em" ]; then
         --grid_ncpus=12 \
         --grid_email="jmccoy26@gsb.columbia.edu" \
         2a_ar1_em_est.R \
-            --impute_vec="../output/signals_best125_1985.txt" \
+            --impute_vec="../data/signals_best125_1985.txt" \
             --em_type="$2" \
             --maxiter=10000 \
             --out_path="/scratch/jpm2223/" \
@@ -39,6 +39,6 @@ if [ $1 = "bllp" ]; then
             --num_PCs=6 \
             --out_path="/scratch/jpm2223/" \
             --out_name="bcsignals_bllp.csv" \
-            --impute_vec="../output/signals_best125_1985.txt"
+            --impute_vec="../data/signals_best125_1985.txt"
 fi
 
