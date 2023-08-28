@@ -56,7 +56,7 @@ if (grepl("\\.txt", opt$impute_vec)) {
 
 # Check that user selected a valid option
 if (!(opt$impute_type %in% c("ind", "indsize", "lastval"))) {
-    cat("Option `--impute_type` must be one of (ind, indsize, lastval)\n")
+    stop("Option `--impute_type` must be one of (ind, indsize, lastval)\n")
 }
 
 #==============================================================================#

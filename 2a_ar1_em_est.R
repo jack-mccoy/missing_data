@@ -21,7 +21,7 @@ on_cluster = Sys.getenv('SGE_TASK_ID') != ""
 
 option_list <- list(
     optparse::make_option(c("--em_type"),
-        type = "character", default = "ar1",
+        type = "character", default = "regular",
         help = "one of (regular, ar1)"),
     optparse::make_option(c("--output_ts_pred"),
         type = "logical", default = FALSE,
@@ -63,6 +63,11 @@ option_list <- list(
 
 opt_parser <- optparse::OptionParser(option_list = option_list)
 opt <- optparse::parse_args(opt_parser)
+
+# Check that user passed valid option
+if (!(opt$em_type %in% c("regular", "ar1"))) {
+    stop("Option `--em_type` must be one of (regular, ar1)\n")
+}
 
 # for consistency
 if (opt$em_type == 'regular'){
@@ -356,6 +361,9 @@ cat("Imputations for", opt$impute_yr, "ran in", imp_time, "minutes")
 #==============================================================================#
 
 dir.create(paste0(opt$out_path, 'em_intermediate'), showWarnings = F)
+if (opt$impute_type == "ar1") {
+
+}
 fwrite(bcsignals_emar1, 
     paste0(opt$out_path, 'em_intermediate/bcsignals_emar1_',opt$impute_yr, '.csv' ))
 sink(paste0(opt$out_path, "em_intermediate/readme.log"))
