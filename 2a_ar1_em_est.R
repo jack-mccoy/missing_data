@@ -362,10 +362,11 @@ cat("Imputations for", opt$impute_yr, "ran in", imp_time, "minutes")
 
 dir.create(paste0(opt$out_path, 'em_intermediate'), showWarnings = F)
 if (opt$impute_type == "ar1") {
-
+    filename <- paste0(opt$out_path, 'em_intermediate/bcsignals_emar1_',opt$impute_yr, '.csv' )
+} else {
+    filename <- paste0(opt$out_path, 'em_intermediate/bcsignals_em_',opt$impute_yr, '.csv' )
 }
-fwrite(bcsignals_emar1, 
-    paste0(opt$out_path, 'em_intermediate/bcsignals_emar1_',opt$impute_yr, '.csv' ))
+fwrite(bcsignals_emar1, filename)
 sink(paste0(opt$out_path, "em_intermediate/readme.log"))
 Sys.time()
 opt
