@@ -21,10 +21,10 @@ if [ $1 = "ppca" ]; then
         --grid_mem=500G \
         --grid_ncpus=12 \
         --grid_email="$USER@gsb.columbia.edu" \
-        2b_ppca_est.R \
+        2c_ppca_est.R \
             --start_yr=1985 \
             --end_yr=2020 \
-            --impute_vec="../output/signals_best125_1985.txt" \
+            --impute_vec="../data/signals_best125_1985.txt" \
             --maxiter=100000 \
             --out_path="/scratch/jpm2223/bcsignals/" \
             --n_pcs=$2

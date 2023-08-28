@@ -191,13 +191,13 @@ if (opt$model %in% c('pcr','spcr')){
 
 # create folder
 if (opt$output_folder == 'auto') {
-  outfolder = paste(
-    opt$model
-    , str_remove(basename(opt$signal_file), '.csv')
-    , sep = '-'
-  )
+    outfolder = paste(
+        opt$model,
+        str_remove(basename(opt$signal_file), '.csv'),
+        sep = '-'
+    )
 } else {
-  outfolder = opt$output_folder
+    outfolder = opt$output_folder
 }
 dir.create(paste0(outroot), showWarnings = F)
 dir.create(paste0(outroot,outfolder), showWarnings = F)
