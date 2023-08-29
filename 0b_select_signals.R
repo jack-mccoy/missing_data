@@ -111,7 +111,7 @@ mostobs1985 = obs[floor(yyyymm) == 1985]  %>%
   ) %>% 
   arrange(-mean_pct_obs) %>% 
   mutate(rank = row_number())  %>% 
-  filter(rank <= 125) %>% 
+  #filter(rank <= 125) %>% 
   setDT()
   
 obs = obs %>% select(permno,yyyymm,all_of(mostobs1985$signalname))
@@ -129,6 +129,16 @@ signaldoc2 = signaldoc %>%
 writeLines(
   signaldoc2 %>% filter(rank1985 <= 125) %>% pull(signalname) 
   , '../data/signals_best125_1985.txt'
+)
+  
+writeLines(
+  signaldoc2 %>% filter(rank1985 <= 150) %>% pull(signalname) 
+  , '../data/signals_best150_1985.txt'
+)
+
+writeLines(
+  signaldoc2 %>%  pull(signalname) 
+  , paste0('../data/signals_best', nrow(signaldoc2), '_1985.txt')
 )
 
 #==============================================================================#
