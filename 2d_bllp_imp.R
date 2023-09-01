@@ -25,6 +25,8 @@ library(RPostgres) # SQL query to WRDS
 library(zoo) # yearmon convention is nice to work with here
 library(tidyverse) # sorry Jack
 
+source("functions.R")
+
 #==============================================================================#
 # Option parsing ----
 #==============================================================================#
@@ -67,8 +69,6 @@ if (length(impute_vec) <= opt$num_PCs){
 #==============================================================================#
 # Setup ----
 #==============================================================================#
-
-source("functions.R")
 
 # Months to impute
 yrmon_list <- zoo::as.yearmon(paste0(month.abb, " ", opt$impute_yr))

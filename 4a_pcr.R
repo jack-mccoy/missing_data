@@ -21,9 +21,9 @@ source("functions.R")
 on_cluster = Sys.getenv('SGE_TASK_ID') != ""
 
 option_list <- list(
-  optparse::make_option(c("--out_path"),
-    type = "character", default = "../output/pca_returns/em/",
-    help = "directory to store output to"),
+  #optparse::make_option(c("--out_path"),
+  #  type = "character", default = "../output/pca_returns/em/",
+  #  help = "directory to store output to"),
   #optparse::make_option(c("--signals_keep"),
   #  type = "character", default = "../output/signals_10.txt",
   #  help = "a comma-separated list of values or .txt file to scan"),
@@ -239,14 +239,14 @@ pcr_pred <- foreach::"%dopar%"(foreach::foreach(
 # Automatic output folder based on dataset
 outfolder <- str_remove(basename(opt$signal_file), '.csv')
 
-dir.create(paste0(FILEPATHS$out_path, "pca_returns/"), showWarnings = FALSE)
-dir.create(paste0(FILEPATHS$out_path, "pca_returns/", outfolder),
+dir.create(paste0(FILEPATHS$data_path, "pca_returns/"), showWarnings = FALSE)
+dir.create(paste0(FILEPATHS$data_path, "pca_returns/", outfolder),
     showWarnings = FALSE)
 
 fwrite(
     rbindlist(pcr_pred)[, n_signals := length(signals_keep)], 
     paste0(
-        FILEPATHS$out_path, 
+        FILEPATHS$data_path, 
         "pca_returns/",
         outfolder,
         'pca_returns/ret_pc_',

@@ -21,9 +21,8 @@ source('functions.R')
 # Project-level file paths
 getFilePaths()
 
-pc_ret_path <- paste0(FILEPATHS$out_path, "pcr_returns/")
-
-plot_path <- '../output/plots/'
+pc_ret_path <- paste0(FILEPATHS$data_path, "pcr_returns/")
+plot_path <- paste0(FILEPATHS$out_path, 'plots/')
 
 imp_names <- setNames(
     c("EM Algo","Simple Mean","BLLP loc B-XS"),

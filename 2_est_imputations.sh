@@ -38,7 +38,7 @@ if [ $1 = "bllp" ]; then
         --grid_email=$user_email \
         2d_bllp_imp.R \
             --num_PCs=6 \
-            --out_name="bcsignals_bllp.csv"
+            --lag_max_years=2
 fi
 
 if [ $1 = "adhoc" ]; then

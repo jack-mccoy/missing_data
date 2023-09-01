@@ -1,5 +1,7 @@
 # 2023 02 trying ml stuff on chen-Zimmermann data
 
+rm(list = ls())
+
 # Necessary to point to tensorflow module when running on CBS grid
 if (Sys.info()["user"] == "jpm2223") {
     reticulate::use_python("/user/jpm2223/.conda/envs/tf/bin/python")
@@ -29,8 +31,7 @@ source("functions.R")
 # Setup ----
 #==============================================================================#
 
-rm(list = ls())
-repulldata = T # use F if debugging and impatient
+repulldata = TRUE # use F if debugging and impatient
 
 # command line options
 optcmd <- optparse::OptionParser(
@@ -39,7 +40,7 @@ optcmd <- optparse::OptionParser(
                           type = "character", default = "pcr",
                           help = "'ranger', 'lm', 'lightgbm' or 'keras1'-'keras4' or 'pcr' or 'spcr' "),
     optparse::make_option(c("--signal_file"),
-                          type = "character", default = "../output/bcsignals/bcsignals_none.csv",
+                          type = "character", default = "bcsignals_none.csv",
                           help = "permno-month-signal csv"),
     optparse::make_option(c("--output_folder"),
                           type = "character", default = 'auto',
@@ -67,6 +68,9 @@ opt = c(optcmd,
           , verbose = 0
         )
 )
+
+# File paths
+getFilePaths()
 
 # keep this subset for testing, use NULL for keep all
 signals_keep = NULL # e.g. c('size','bm','mom12m')
@@ -114,7 +118,7 @@ optspcr = list(
 #==============================================================================#
 
 if (repulldata) {# Read in data 
-  dat <- fread(opt$signal_file)
+  dat <- fread(paste0(FILEPATHS$data_path, "bcsignals/", opt$signal_file))
   setnames(dat, colnames(dat), tolower(colnames(dat))) # ensure lower
   dat[, yyyymm := as.yearmon(yyyymm)]
   
