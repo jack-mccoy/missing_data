@@ -3,8 +3,9 @@
 # Array of model names
 mods=("keras1" "keras2" "keras3" "keras4" "keras5" "lightgbm" "lm" "pcr" "spcr") 
 # Array of imputation types
-#imps=("em" "none" "availcase" "ppca10" "ppca60" "bllp" "emar1")
-imps=("none_best125" "none_best150")
+#imps=("none" "em" "emar1" "ppca67" "ind" "indsize" "lastval")
+# "bllp" NOTE: need to add later when done
+imps=("ppca10" "ppca40" "ppca60")
 
 yearm_begin="1995-06"
 yearm_end="2020-06"

@@ -11,6 +11,8 @@ library(zoo)
 
 closeAllConnections()
 
+source("functions.R")
+
 #==============================================================================#
 # Option parsing ----
 #==============================================================================#
@@ -22,11 +24,11 @@ option_list <- list(
   optparse::make_option(c("--out_path"),
     type = "character", default = "../output/pca_returns/em/",
     help = "directory to store output to"),
-  optparse::make_option(c("--signals_keep"),
-    type = "character", default = "../output/signals_10.txt",
-    help = "a comma-separated list of values or .txt file to scan"),
-  optparse::make_option(c("--data_file"),
-    type = "character", default = "../output/bcsignals/bcsignals_em.csv",
+  #optparse::make_option(c("--signals_keep"),
+  #  type = "character", default = "../output/signals_10.txt",
+  #  help = "a comma-separated list of values or .txt file to scan"),
+  optparse::make_option(c("--signal_file"),
+    type = "character", default = "bcsignals_em.csv",
     help = "path of imputed file"),
   optparse::make_option(c("--iter_year"),
     type = "numeric", default = 1990,
@@ -59,30 +61,11 @@ option_list <- list(
 opt_parser <- optparse::OptionParser(option_list = option_list)
 opt <- optparse::parse_args(opt_parser)
 
-# Get the anomalies as a nice vector
-if (grepl("\\.txt", opt$signals_keep)) {
-  opt$signals_keep <- scan(opt$signals_keep, character())
-} else if (grepl(",", opt$signals_keep)) {
-  opt$signals_keep <- trimws(do.call("c", strsplit(opt$signals_keep, ",")))
-} else {
-  stop("It seems that you did not pass a .txt file or comma-separated list ",
-    "to the `signals_keep` argument\n")
-}
+# Get the file paths
+getFilePaths()
 
-# Good directory ending
-if (substr(opt$out_path, nchar(opt$out_path), nchar(opt$out_path)) != "/") {
-  opt$out_path <- paste0(opt$out_path, "/")
-}
-
-# make dir 
-# note: does not make all the folders required for out_path, necessarily
-dir.create(opt$out_path, showWarnings = F)
-
-#==============================================================================#
-# Functions ----
-#==============================================================================#
-
-source("functions.R")
+# Signals to use
+signals_keep <- unpackSignalList(FILEPATHS$signal_list)
 
 #==============================================================================#
 # Get prediction month from array iteration map ----
@@ -98,7 +81,7 @@ cat("PC regressions for ", as.character(pred_mon), "\n")
 #==============================================================================#
 
 # Read in data and merge
-signals <- fread(opt$data_file)
+signals <- fread(paste0(FILEPATHS$data_path, "bcsignals/", opt$signal_file))
 setnames(signals, colnames(signals), tolower(colnames(signals))) # ensure lower
 
 crsp_data <- fread("../data/crsp_data.csv")[, .(permno, yyyymm, ret, me)]
@@ -119,14 +102,14 @@ signals <- signals[
 # Simple mean imputations. Shouldn't matter for EM-imputed data
 # Easiest to just catch it all here for non-imputed data
 signals[,
-    (opt$signals_keep) := lapply(.SD, imputeVec, na.rm = T),
-    .SDcols = opt$signals_keep,
+    (signals_keep) := lapply(.SD, imputeVec, na.rm = T),
+    .SDcols = signals_keep,
     by = .(yyyymm)
 ]
 
 # Complete cases are necessary for principal components. Ensuring here
 signals <- signals[complete.cases(
-  signals[, .SD, .SDcols = c("permno", "yyyymm", "ret", "me", opt$signals_keep)]
+  signals[, .SD, .SDcols = c("permno", "yyyymm", "ret", "me", signals_keep)]
 )]
 
 #==============================================================================# 
@@ -160,8 +143,8 @@ if (opt$scaled_pca){
     
     # regress bh1m on each signal, dropping current month's bh1m
     temp = lapply(
-      opt$signals_keep
-      , function(signalname){
+      signals_keep,
+      function(signalname){
         summary(lm(
           paste0('bh1m ~ ', signalname), signals[time_avail_m < pred_mon]
           , weights = tempw
@@ -169,7 +152,7 @@ if (opt$scaled_pca){
       }
     )
     slopedat = data.table(
-      signalname = opt$signals_keep,
+      signalname = signals_keep,
       slope = as.numeric(temp)
     )
     
@@ -177,13 +160,13 @@ if (opt$scaled_pca){
     slopemat = matrix(1, dim(signals)[1], 1) %*% t(as.matrix(slopedat$slope))
     
     signals = cbind(
-      signals[ , .SD, .SDcols = opt$signals_keep] * slopemat,
-      signals[ , .SD, .SDcols = !opt$signals_keep] 
+      signals[ , .SD, .SDcols = signals_keep] * slopemat,
+      signals[ , .SD, .SDcols = !signals_keep] 
     )
-    pc <- prcomp(signals[, .SD, .SDcols = opt$signals_keep], 
+    pc <- prcomp(signals[, .SD, .SDcols = signals_keep], 
         center = FALSE, scale = FALSE)
 } else {
-    pc <- prcomp(signals[, .SD, .SDcols = opt$signals_keep], 
+    pc <- prcomp(signals[, .SD, .SDcols = signals_keep], 
         center = TRUE, scale = TRUE)
 }
 
@@ -253,9 +236,22 @@ pcr_pred <- foreach::"%dopar%"(foreach::foreach(
 # Output ----
 #==============================================================================#
 
-fwrite(rbindlist(pcr_pred)[, n_signals := length(opt$signals_keep)], 
-  paste0(
-    opt$out_path, 'ret_pc_', format(pred_mon, '%Y_%m'), '.csv'
-  ))
+# Automatic output folder based on dataset
+outfolder <- str_remove(basename(opt$signal_file), '.csv')
 
+dir.create(paste0(FILEPATHS$out_path, "pca_returns/"), showWarnings = FALSE)
+dir.create(paste0(FILEPATHS$out_path, "pca_returns/", outfolder),
+    showWarnings = FALSE)
+
+fwrite(
+    rbindlist(pcr_pred)[, n_signals := length(signals_keep)], 
+    paste0(
+        FILEPATHS$out_path, 
+        "pca_returns/",
+        outfolder,
+        'pca_returns/ret_pc_',
+        format(pred_mon, '%Y_%m'),
+        '.csv'
+    )
+)
 

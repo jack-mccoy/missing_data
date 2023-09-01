@@ -4,13 +4,12 @@
 if (Sys.info()["user"] == "jpm2223") {
     reticulate::use_python("/user/jpm2223/.conda/envs/tf/bin/python")
 }
-#==============================================================================#
-# Setup ----
-#==============================================================================#
-rm(list = ls())
-repulldata = T # use F if debugging and impatient
 
+#==============================================================================#
+# Libraries
+#==============================================================================#
 
+# General
 library(data.table)
 library(tidyverse)
 library(ggplot2)
@@ -22,6 +21,16 @@ library(ranger)
 library(tensorflow)
 library(keras)
 library(lightgbm)
+
+# Functions
+source("functions.R")
+
+#==============================================================================#
+# Setup ----
+#==============================================================================#
+
+rm(list = ls())
+repulldata = T # use F if debugging and impatient
 
 # command line options
 optcmd <- optparse::OptionParser(
@@ -35,9 +44,9 @@ optcmd <- optparse::OptionParser(
     optparse::make_option(c("--output_folder"),
                           type = "character", default = 'auto',
                           help = "results go here.  use 'auto' to auto-generate"),
-    optparse::make_option(c("--outroot"), # need flexibility because of storage limits
-        type = "character", default = "../output/forecast/",
-        help = "root of output path"),
+    #optparse::make_option(c("--outroot"), # need flexibility because of storage limits
+    #    type = "character", default = "../output/forecast/",
+    #    help = "root of output path"),
     optparse::make_option(c("--yearm_begin"),
                           type = "character", default = '1995-06',
                           help = "first in-sample end"),
@@ -58,9 +67,6 @@ opt = c(optcmd,
           , verbose = 0
         )
 )
-
-# output names
-outroot = opt$outroot
 
 # keep this subset for testing, use NULL for keep all
 signals_keep = NULL # e.g. c('size','bm','mom12m')
@@ -199,11 +205,11 @@ if (opt$output_folder == 'auto') {
 } else {
     outfolder = opt$output_folder
 }
-dir.create(paste0(outroot), showWarnings = F)
-dir.create(paste0(outroot,outfolder), showWarnings = F)
+dir.create(paste0(FILEPATHS$out_path, "forecast/"), showWarnings = F)
+dir.create(paste0(FILEPATHS$out_path, "forecast/", outfolder), showWarnings = F)
 
 # save settings (make sure you're running the right thing!)
-sink(paste0(outroot,outfolder,'/settings.txt'))
+sink(paste0(FILEPATHS$out_path, "forecast/" ,outfolder, '/settings.txt'))
 print('================================')
 print('opt')
 format(opt)
@@ -572,11 +578,17 @@ for (sampi in 1:dim(sample_list)[1]){
   )
   
   if (sampi == 1){
-    write.table(log.text, paste0(outroot,outfolder, '/forecast-loop.log')
-                , append = FALSE, row.names = FALSE, col.names = FALSE)
+    write.table(log.text, 
+        paste0(FILEPATHS$out_path, "forecast/", outfolder, '/forecast-loop.log'),
+        append = FALSE,
+        row.names = FALSE,
+        col.names = FALSE)
   } else {
-    write.table(log.text, paste0(outroot,outfolder, '/forecast-loop.log')
-                , append = TRUE, row.names = FALSE, col.names = FALSE)
+    write.table(log.text,
+        paste0(FILEPATHS$out_path, "forecast/", outfolder, '/forecast-loop.log'),
+            append = TRUE,
+            row.names = FALSE,
+            col.names = FALSE)
   }
   
   print(tunesum)
@@ -638,17 +650,17 @@ port = rbind(make_ports('ew'), make_ports('vw'))
 
 # save tuning results
 tuneresult = tuneresult %>% arrange(-best,oos_begin)
-fwrite(tuneresult, paste0(outroot,outfolder,'/tuning-results.csv'))
+fwrite(tuneresult, paste0(FILEPATHS$out_path, "forecast/", outfolder, '/tuning-results.csv'))
 
 # save forecasts
-fwrite(forecast, paste0(outroot,outfolder,'/permno-month-forecast.csv'))
+fwrite(forecast, paste0(FILEPATHS$out_path, "forecast/", outfolder, '/permno-month-forecast.csv'))
 
 # save portfolios
-fwrite(port, paste0(outroot,outfolder,'/portsort.csv'))
+fwrite(port, paste0(FILEPATHS$out_path, "forecast/", outfolder, '/portsort.csv'))
 
 
 # save settings and summary
-sink(paste0(outroot,outfolder,'/summary and settings.txt'))
+sink(paste0(FILEPATHS$out_path, "forecast/", outfolder, '/summary and settings.txt'))
 print('================================')
 print('ew port sumstats')
 port %>% 

@@ -26,7 +26,7 @@ library(extrafont)
 ## read in observed ----
 
 # observed signals (transformed)
-signals_obs = fread(paste0(outpath, '/bcsignals/bcsignals_none.csv'))
+signals_obs = fread(paste0(FILEPATHS$data_path, 'bcsignals/bcsignals_none.csv'))
 signals_obs = signals_obs[ , yyyymm := as.yearmon(yyyymm)][yyyymm %in% datelist]
 
 # convert to covariance matricies

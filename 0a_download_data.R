@@ -9,9 +9,13 @@ library(RPostgres)
 library(zoo)
 library(googledrive)
 library(tidyverse)
+source("functions.R")
 
-dir.create('../data/', showWarnings = F)
-dir.create('../output/', showWarnings = F)
+# Gets the file paths and creates directories as needed
+getFilePaths(signal_list_exists = FALSE) # signal list not yet made
+
+# Create directory for downloaded data that has not been transformed or imputed
+dir.create(paste0(FILEPATHS$data_path, "raw/"), showWarnings = FALSE)
 
 # log in ----
 wrds_user <- getPass::getPass("WRDS username: ")
@@ -20,11 +24,9 @@ wrds_pass <- getPass::getPass("WRDS pass: ")
 wrds <- DBI::dbConnect(RPostgres::Postgres(),
     host = "wrds-pgdata.wharton.upenn.edu",
     db = "wrds",
-    port = 9737)
-    
-    #,
-    #user = wrds_user, 
-    #pass = wrds_pass)
+    port = 9737,
+    user = wrds_user, 
+    pass = wrds_pass)
 
 #==============================================================================#
 # Download CRSP ====
@@ -90,7 +92,7 @@ crsp_final <- crspm[, .(
 rm(crspm)
 
 # Output ----
-fwrite(crsp_final, "../data/crsp_data.csv")
+fwrite(crsp_final, paste0(FILEPATHS$data_path, "raw/crsp_data.csv"))
 
 #==============================================================================#
 # Fama-French Factors ====
@@ -111,7 +113,7 @@ ff5_mom <- as.data.table(dbGetQuery(wrds, "
 
 DBI::dbDisconnect(wrds)
 
-fwrite(ff5_mom, "../data/ff5_factors.csv")
+fwrite(ff5_mom, paste0(FILEPATHS$data_path, "raw/ff5_factors.csv"))
 
 rm(ff5_mom)
 
@@ -125,34 +127,42 @@ path_release <- "https://drive.google.com/drive/folders/1EP6oEabyZRamveGNyzYU0u6
 # Allow non-interactive download
 drive_deauth()
 
-## dl signal documentation ====
+# dl signal documentation ====
+
 target_dribble = path_release %>% drive_ls() %>% 
   filter(name=='SignalDoc.csv')
 
-drive_download(target_dribble, path = '../data/SignalDoc.csv', overwrite = T)
+drive_download(target_dribble, 
+    path = paste0(FILEPATHS$data_path, 'raw/SignalDoc.csv'),
+    overwrite = TRUE)
 
-## dl signals (except the crsp ones) ====
+# dl signals (except the crsp ones) ====
 
 # 2 gig dl, can take a few minutes
 # download
-target_dribble = path_release %>% drive_ls() %>% 
-  filter(name == 'Firm Level Characteristics') %>% drive_ls() %>% 
-  filter(name == 'Full Sets') %>% drive_ls() %>% 
-  filter(name == 'signed_predictors_dl_wide.zip') 
-dl = drive_download(target_dribble, path = '../data/deleteme.zip', overwrite = T)
+target_dribble <- path_release %>% drive_ls() %>% 
+    filter(name == 'Firm Level Characteristics') %>% drive_ls() %>% 
+    filter(name == 'Full Sets') %>% drive_ls() %>% 
+    filter(name == 'signed_predictors_dl_wide.zip') 
+dl <- drive_download(target_dribble, 
+    path = paste0(FILEPATHS$data_path, 'raw/deleteme.zip'),
+    overwrite = TRUE)
 
 # unzip, clean up
-unzip('../data/deleteme.zip', exdir = '../data')
-file.remove('../data/deleteme.zip')
+unzip(paste0(FILEPATHS$data_path, 'raw/deleteme.zip'), 
+    exdir = paste0(FILEPATHS$data_path, 'raw/'))
+file.remove(paste0(FILEPATHS$data_path, 'raw/deleteme.zip'))
 
 # download ports ====
 # this is just for counting and making signal lists
 target_dribble = path_release %>% drive_ls() %>% 
-  filter(name == 'Portfolios') %>% drive_ls() %>% 
-  filter(name == 'Full Sets OP') %>% drive_ls() %>% 
-  filter(name == 'PredictorPortsFull.csv')
+    filter(name == 'Portfolios') %>% drive_ls() %>% 
+    filter(name == 'Full Sets OP') %>% drive_ls() %>% 
+    filter(name == 'PredictorPortsFull.csv')
 
-drive_download(target_dribble, path = '../data/PredictorPortsFull.csv', overwrite = T)
+drive_download(target_dribble, 
+    path = paste0(FILEPATHS$data_path, 'raw/PredictorPortsFull.csv'),
+    overwrite = TRUE)
 
 # memory
 rm(target_dribble, dl)
@@ -164,7 +174,7 @@ rm(target_dribble, dl)
 # Maximize memory
 gc()
 
-signals <- fread("../data/signed_predictors_dl_wide.csv")
+signals <- fread(paste0(FILEPATHS$data_path, "raw/signed_predictors_dl_wide.csv"))
 
 # For merging
 if (class(signals$yyyymm) != "yearmon") {
@@ -181,5 +191,6 @@ signals_filt <- merge(signals, crsp_final[, .(permno, yyyymm)],
 cat("After share code filter, there are", nrow(signals_filt), "observations",
     "in the signals data set")
 
-fwrite(signals_filt, "../data/signed_predictors_dl_wide_filtered.csv")
+fwrite(signals_filt, 
+    paste0(FILEPATHS$data_path, "raw/signed_predictors_dl_wide_filtered.csv"))
 

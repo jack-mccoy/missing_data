@@ -325,3 +325,57 @@ imputeLastVal <- function(x, yrmons, k = 12) {
     }
 }
 
+getFilePaths <- function(signal_list_exists=TRUE) {
+    pathnames <- c("data_path", "out_path", "signal_list")
+    # Load file
+    if (file.exists("FILEPATHS.R")) {
+        source('FILEPATHS.R')
+        # Make sure it has a list `FILEPATHS`
+        if (exists("FILEPATHS")) {
+            # Make sure it has the right names
+            if (all(pathnames %in% names(FILEPATHS))) {
+                # If desired, make sure signal list exists (created after a few scripts)
+                if (signal_list_exists) {
+                    if (!file.exists(FILEPATHS$signal_list)) {
+                        stop("signal_list `", FILEPATHS$signal_list, "` does not exist\n", sep="")
+                    }
+                }
+                for (path in pathnames[1:2]) {
+                    if (!dir.exists(FILEPATHS[[path]])) {
+                        cat("Creating directory `", FILEPATHS[[path]], "`\n", sep = "")
+                        dir.create(FILEPATHS[[path]], showWarnings = FALSE)
+                    }
+                }
+            } else {
+                stop(
+                    "`FILEPATHS` list does not contain all of (", 
+                    paste(pathnames, collapse = ", "), ")\n",
+                    sep = ""
+                )
+            }
+        } else {
+            stop(
+                "File `FILEPATHS.R` must have list `FILEPATHS` and entries (",
+                paste(pathnames, collapse = ", "), ")\n",
+                sep = ""
+            )
+        }
+    } else {
+        stop(
+            "Must make `FILEPATHS.R` file with list `FILEPATHS` and entries (",
+            paste(pathnames, collapse = ", "), ")\n",
+            sep = ""
+        )
+    }
+}
+
+unpackSignalList <- function(signal_list) {
+    if (grepl("\\.txt", signal_list)) {
+        impute_vec <- scan(signal_list, character())
+    } else if (grepl(",", signal_list)) {
+        impute_vec <- trimws(do.call("c", strsplit(signal_list, ",")))
+    } else {
+        stop("It seems that `signal_list` is not a .txt file or comma-separated list\n")
+    }
+    return(impute_vec)
+}

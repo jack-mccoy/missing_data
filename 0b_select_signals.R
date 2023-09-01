@@ -18,25 +18,36 @@ library(xtable) # for long table
 
 source("functions.R")
 
+#==============================================================================#
+# Hardcodes ----
+#==============================================================================#
+
+# user
+date_start <- 1985
+date_end <- 2020
 
 #==============================================================================#
 # Read in, create obs table, and select 125 signals  ----
 #==============================================================================#
 
+# Get the file paths
+getFilePaths(signal_list_exists = FALSE) # signal list not yet made
+
 ## read ----
 
 # Read in the downloadable signals 
-signals <- fread("../data/signed_predictors_dl_wide_filtered.csv") 
+signals <- fread(paste0(FILEPATHS$data_path, 
+    "raw/signed_predictors_dl_wide_filtered.csv")) 
 setnames(signals, colnames(signals), tolower(colnames(signals)))
 signals[, yyyymm := as.yearmon(yyyymm)] # NOTE: data is pre-formatted now in 0a_download_data.R
 
 # merge on crsp predictors
-crsp_data <- fread("../data/crsp_data.csv")[, .SD, .SDcols = !c("ret", "me")]
+crsp_data <- fread(paste0(FILEPATHS$data_path, "raw/crsp_data.csv"))[, .SD, .SDcols = !c("ret", "me")]
 crsp_data[, yyyymm := as.yearmon(yyyymm)]
 signals <- merge(signals, crsp_data, by = c("permno", "yyyymm"))
 
 # read signal doc
-signaldoc = fread('../data/SignalDoc.csv')  %>% 
+signaldoc = fread(paste0(FILEPATHS$data_path, 'raw/SignalDoc.csv'))  %>% 
   mutate(
     signalname = Acronym
   ) %>% 
@@ -63,10 +74,6 @@ list_cts = signaldoc[Cat.Form == 'continuous'] %>% pull(signalname)
 obs = obs %>% select(yyyymm,permno,all_of(list_cts))
 
 ## drop signals with gaps ----
-
-# user
-date_start = 1985
-date_end = 2020
 
 # find totally-missing-months
 obs_by_date = obs[
@@ -127,24 +134,25 @@ signaldoc2 = signaldoc %>%
   arrange(rank1985)
   
 writeLines(
-  signaldoc2 %>% filter(rank1985 <= 125) %>% pull(signalname) 
-  , '../data/signals_best125_1985.txt'
+  signaldoc2 %>% filter(rank1985 <= 125) %>% pull(signalname),
+  paste0(FILEPATHS$data_path, 'signals_best125_1985.txt')
 )
   
 writeLines(
-  signaldoc2 %>% filter(rank1985 <= 150) %>% pull(signalname) 
-  , '../data/signals_best150_1985.txt'
+  signaldoc2 %>% filter(rank1985 <= 150) %>% pull(signalname), 
+  paste0(FILEPATHS$data_path, 'signals_best150_1985.txt')
 )
 
 writeLines(
-  signaldoc2 %>%  pull(signalname) 
-  , paste0('../data/signals_best', nrow(signaldoc2), '_1985.txt')
+  signaldoc2 %>% pull(signalname),
+  paste0(FILEPATHS$data_path, 'signals_best', nrow(signaldoc2), '_1985.txt')
 )
 
 #==============================================================================#
 # Output lists of predictors ----
 #==============================================================================#
 
+dir.create(paste0(FILEPATHS$out_path, "tables/"))
 
 final_list = signaldoc2 %>% 
   mutate(
@@ -155,30 +163,22 @@ final_list = signaldoc2 %>%
   ) %>% 
   arrange(rank1985) 
 
-
 # Create Latex output table 1: Clear Predictors
 outputtable1 <- xtable(
   final_list 
   , digits = c(0,0,0,1,0)
 )
 
-
 print(outputtable1,
       include.rownames = FALSE,
       include.colnames = FALSE,
       hline.after = NULL,
       only.contents = TRUE,
-      file = '../output/plots/long_list.tex')
-
-
-
+      file = paste0(FILEPATHS$out_path, 'tables/long_list.tex'))
 
 #==============================================================================#
 # Check (to console, for now) ----
 #==============================================================================#
-
-
-
 
 ## data coverage ----
 signaldoc2  %>% group_by(Cat.Data) %>% summarize(nsignal_1985 = n()) 
@@ -257,8 +257,8 @@ pct_obs_one_signal_ptile = nobs_by_signal %>%
 
 pct_obs_one_signal_ptile 
 
-write.csv(pct_obs_one_signal_ptile, '../output/plots/pct_obs_one_signal_ptile.csv')
-
+write.csv(pct_obs_one_signal_ptile, 
+    paste0(FILEPATHS$out_path, 'tables/pct_obs_one_signal_ptile.csv'))
 
 ## Many signal summaries ----
 dateselect = c(1975, 1985, 1995)
@@ -334,6 +334,7 @@ pct_obs_by_nsignal = nobs_by_J_signals %>%
   )
 
 
-write.csv(pct_obs_by_nsignal, '../output/plots/pct_obs_by_nsignal.csv')
+write.csv(pct_obs_by_nsignal, 
+    paste0(FILEPATHS$out_path, 'tables/pct_obs_by_nsignal.csv'))
 
 pct_obs_by_nsignal

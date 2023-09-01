@@ -26,9 +26,9 @@ option_list <- list(
     optparse::make_option(c("--output_ts_pred"),
         type = "logical", default = FALSE,
         help = "output the prediction of time-series model?"),  
-    optparse::make_option(c("--out_path"), # Need this flexibility. Files are too big to store in non-scratch
-        type = "character", default = "../output/",
-        help = "directory including input and output files"),
+    #optparse::make_option(c("--out_path"), # Need this flexibility. Files are too big to store in non-scratch
+    #    type = "character", default = "../output/",
+    #    help = "directory including input and output files"),
     optparse::make_option(c("--impute_yr"),
        type = "numeric", 
        default = ifelse(on_cluster, as.integer(Sys.getenv("SGE_TASK_ID")), 2015),
@@ -36,9 +36,9 @@ option_list <- list(
     optparse::make_option(c("--impute_months"),
        type = "character", default = '1,2,3,4,5,6,7,8,9,10,11,12',
        help = "months of data to impute"),    
-    optparse::make_option(c("--impute_vec"),
-       type = "character", default = "bm,mom6m",
-       help = "a comma-separated list of values or .txt file to scan"),
+    #optparse::make_option(c("--impute_vec"),
+    #   type = "character", default = "bm,mom6m",
+    #   help = "a comma-separated list of values or .txt file to scan"),
     optparse::make_option(c("--ar1_sample_length"),
        type = "numeric", 
        default = 5,
@@ -70,23 +70,18 @@ if (!(opt$em_type %in% c("regular", "ar1"))) {
 }
 
 # for consistency
-if (opt$em_type == 'regular'){
-  opt$ar1_sample_length = 1
-}
-
-
-# Get the anomalies as a nice vector
-if (grepl("\\.txt", opt$impute_vec)) {
-  opt$impute_vec <- scan(opt$impute_vec, character())
-} else if (grepl(",", opt$impute_vec)) {
-  opt$impute_vec <- trimws(do.call("c", strsplit(opt$impute_vec, ",")))
-} else {
-  stop("It seems that you did not pass a .txt file or comma-separated list",
-       "to the `impute_vec` argument\n")
-}
+if (opt$em_type == 'regular'){ opt$ar1_sample_length <- 1 }
 
 # convert impute_months to numeric
-opt$impute_months = as.numeric(strsplit(opt$impute_months, ',')[[1]])
+opt$impute_months <- as.numeric(strsplit(opt$impute_months, ',')[[1]])
+
+# File paths and signal list ====
+
+# Load file paths
+getFilePaths()
+
+# Get the anomalies as a nice vector
+impute_vec <- unpackSignalList(FILEPATHS$signal_list)
 
 #==============================================================================#
 # Setup ----
@@ -97,14 +92,14 @@ source("functions.R")
 closeAllConnections()
 
 # Read in the bc-transformed signals 
-bcsignals = fread(paste0(opt$out_path, "bcsignals/bcsignals_none.csv")) 
+bcsignals = fread(paste0(FILEPATHS$data_path, "bcsignals/bcsignals_none.csv")) 
 bcsignals[ , yyyymm := as.yearmon(yyyymm)]  # careful with reading yearmon format from csv!
 
 # keep only selected signals and months needed for ar1 samples
 bcsignals <- bcsignals[
   yyyymm >= as.yearmon(paste0(opt$impute_yr, '-01')) - opt$ar1_sample_length + 1/12 
   & yyyymm <= as.yearmon(paste0(opt$impute_yr, '-12'))
-  , .SD, .SDcols = c("permno", "yyyymm", opt$impute_vec)
+  , .SD, .SDcols = c("permno", "yyyymm", impute_vec)
 ]
 
 # reshape to long
@@ -116,7 +111,7 @@ bclong = bcsignals %>%
   setDT()
 
 # find signal update frequency
-signaldoc = fread('../data/SignalDoc.csv') %>% 
+signaldoc = fread(paste0(FILEPATHS$data_path, 'raw/SignalDoc.csv')) %>% 
   filter(Cat.Signal == 'Predictor') %>% 
   transmute(signalname = tolower(Acronym)
             , port_start = `Start Month`, port_period = `Portfolio Period`) %>% 
@@ -275,9 +270,9 @@ bcsignals_emar1 <- foreach::"%dopar%"(foreach::foreach(
   
   # sort by missingness, arrange columns
   na_sort <- do.call("order", as.data.frame(-is.na(xs$resid))) 
-  xs$resid = xs$resid[ na_sort,   ] %>% select(c(permno,yyyymm, opt$impute_vec))
-  xs$pred = xs$pred[na_sort, ] %>% select(c(permno,yyyymm, opt$impute_vec))
-  xs$obs = xs$obs[na_sort, ] %>% select(c(permno,yyyymm, opt$impute_vec))  
+  xs$resid = xs$resid[ na_sort,   ] %>% select(c(permno,yyyymm, impute_vec))
+  xs$pred = xs$pred[na_sort, ] %>% select(c(permno,yyyymm, impute_vec))
+  xs$obs = xs$obs[na_sort, ] %>% select(c(permno,yyyymm, impute_vec))  
   
   # make matrices (note they're sorted above)
   mat_resid <- xs$resid %>% select(-c(permno,yyyymm)) %>% as.matrix
@@ -304,7 +299,7 @@ bcsignals_emar1 <- foreach::"%dopar%"(foreach::foreach(
     Sys.time()
     print('ar1_em_est.R error: divergence')
     i
-    opt$impute_vec
+    impute_vec
     print('iter, tolerance')
     em_out$maxiter
     em_out$tol
@@ -360,14 +355,14 @@ cat("Imputations for", opt$impute_yr, "ran in", imp_time, "minutes")
 # Save ----
 #==============================================================================#
 
-dir.create(paste0(opt$out_path, 'em_intermediate'), showWarnings = F)
+dir.create(paste0(FILEPATHS$data_path, 'em_intermediate'), showWarnings = F)
 if (opt$em_type == "ar1") {
-    filename <- paste0(opt$out_path, 'em_intermediate/bcsignals_emar1_',opt$impute_yr, '.csv' )
+    filename <- paste0(FILEPATHS$data_path, 'em_intermediate/bcsignals_emar1_',opt$impute_yr, '.csv' )
 } else {
-    filename <- paste0(opt$out_path, 'em_intermediate/bcsignals_em_',opt$impute_yr, '.csv' )
+    filename <- paste0(FILEPATHS$data_path, 'em_intermediate/bcsignals_em_',opt$impute_yr, '.csv' )
 }
 fwrite(bcsignals_emar1, filename)
-sink(paste0(opt$out_path, "em_intermediate/readme.log"))
+sink(paste0(FILEPATHS$data_path, "em_intermediate/readme.log"))
 Sys.time()
 opt
 sink()
@@ -378,7 +373,7 @@ if (opt$output_ts_pred){
         arrange(permno,yyyymm) 
     
     fwrite(ts_pred,
-        paste0(opt$out_path, "em_intermediate/ts_prediction_",opt$impute_yr, ".csv"))
+        paste0(FILEPATHS$data_path, "em_intermediate/ts_prediction_",opt$impute_yr, ".csv"))
 }
 
 #==============================================================================#

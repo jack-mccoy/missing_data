@@ -4,11 +4,17 @@ library(kableExtra)
 library(stringr)
 library(zoo)
 
+source("functions.R")
+
 #===============================================================================
-# Hardcodes
+# Paths
 #===============================================================================
 
-fcast_dir <- "/scratch/jpm2223/forecast/"
+# Load the projects file paths
+getFilePaths()
+
+# Set up the file list
+fcast_dir <- paste0(FILEPATHS$out_path, "forecast/")
 fcasts <- system(paste("ls", fcast_dir), intern=TRUE) 
 fcasts_files <- paste0(fcast_dir, fcasts, "/permno-month-forecast.csv")
 
@@ -17,7 +23,7 @@ fcasts_files <- paste0(fcast_dir, fcasts, "/permno-month-forecast.csv")
 #===============================================================================
 
 # Read in data
-crsp_data <- fread("../data/crsp_data.csv")[, c("permno", "yyyymm", "me")]
+crsp_data <- fread(paste0(FILEPATHS$data_path, "raw/crsp_data.csv"))[, c("permno", "yyyymm", "me")]
 fcast_data <- rbindlist(lapply(fcasts, function(f) { 
     file <- paste0(fcast_dir, f, "/permno-month-forecast.csv")
     method <- stringr::str_split(f, "-")[[1]][1]
@@ -73,7 +79,10 @@ table_vw <- dcast(ls_ports_mean, "imp ~ method", value.var = "vw")
 # Output
 #===============================================================================
 
-fwrite(table_ew, '../dump/fcast_table_ew.csv')
-fwrite(table_vw, '../dump/fcast_table_vw.csv')
+# In case it doesn't already exist
+dir.create(paste0(FILEPATHS$out_path, "tables"))
+
+fwrite(table_ew, paste0(FILEPATHS$out_path, 'tables/fcast_table_ew.csv'))
+fwrite(table_vw, paste0(FILEPATHS$out_path, 'tables/fcast_table_vw.csv')
 
 

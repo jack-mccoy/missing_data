@@ -9,9 +9,12 @@ library(zoo)
 
 source("functions.R")
 
+# Project-level file paths
+getFilePaths()
+
 # Hardcodes 
-plot_path <- "../output/plots/"
-dates <- as.yearmon(c("Jun 1985","Jun 1990", "Jun 2000", "Jun 2010"))
+plot_path <- paste0(FILEPATHS$out_path, "plots/")
+dates <- as.yearmon(c("Jun 1985", "Jun 1990", "Jun 2000", "Jun 2010"))
 
 dir.create(plot_path, showWarnings = F)
 
@@ -19,18 +22,15 @@ dir.create(plot_path, showWarnings = F)
 # Read in the data ----
 #===============================================================================#
 
-dat <- fread("../output/bcsignals/bcsignals_none.csv")[
+dat <- fread(paste0(FILEPATHS$data_path, "bcsignals/bcsignals_none.csv"))[
   as.yearmon(yyyymm) %in% dates # Keep only the months we need
 ]
-
 
 dat[, yyyymm := as.yearmon(yyyymm)]
 
 #===============================================================================#
 # Output plots ----
 #===============================================================================#
-
-
 
 # Missingness plot function
 missPlot <- function(data, rhs_vars, xlab = "Stock i.d.", ylab = "Predictor i.d.",
@@ -77,7 +77,6 @@ missPlot <- function(data, rhs_vars, xlab = "Stock i.d.", ylab = "Predictor i.d.
   
   return(miss_plot)
 }
-
 
 
 signals_keep = names(dat)

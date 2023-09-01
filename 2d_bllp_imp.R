@@ -36,15 +36,15 @@ option_list <- list(
   optparse::make_option(c("--num_PCs"),
                         type = "numeric", default = 6,
                         help = "number of PCs of AC Cov to use"),
-  optparse::make_option(c("--out_path"), # Need this flexibility. Files are too big to store in non-scratch
-                        type = "character", default = "../output/",
-                        help = "directory including input and output files"),
-  optparse::make_option(c("--out_name"), 
-                        type = "character", default = "bcsignals_bllp.csv",
-                        help = "directory including input and output files"),  
-  optparse::make_option(c("--impute_vec"),
-                        type = "character", default = "../data/signals_best125_1985.txt",
-                        help = "a comma-separated list of values or .txt file to scan"),
+  #optparse::make_option(c("--out_path"), # Need this flexibility. Files are too big to store in non-scratch
+  #                      type = "character", default = "../output/",
+  #                      help = "directory including input and output files"),
+  #optparse::make_option(c("--out_name"), 
+  #                      type = "character", default = "bcsignals_bllp.csv",
+  #                      help = "directory including input and output files"),  
+  #optparse::make_option(c("--impute_vec"),
+  #                      type = "character", default = "../data/signals_best125_1985.txt",
+  #                      help = "a comma-separated list of values or .txt file to scan"),
   optparse::make_option(c("--lag_max_years"),
                         type = "numeric", default = 2,
                         help = "max num years to look back for 2nd stage")
@@ -54,17 +54,13 @@ option_list <- list(
 opt_parser <- optparse::OptionParser(option_list = option_list)
 opt <- optparse::parse_args(opt_parser)
 
-# Get the anomalies as a nice vector
-if (grepl("\\.txt", opt$impute_vec)) {
-  opt$impute_vec <- scan(opt$impute_vec, character())
-} else if (grepl(",", opt$impute_vec)) {
-  opt$impute_vec <- trimws(do.call("c", strsplit(opt$impute_vec, ",")))
-} else {
-  stop("It seems that you did not pass a .txt file or comma-separated list",
-       "to the `impute_vec` argument\n")
-}
+# Load file paths
+getFilePaths()
 
-if (length(opt$impute_vec) <= opt$num_PCs){
+# Get the anomalies as a nice vector
+impute_vec <- unpackSignalList(FILEPATHS$signal_list)
+
+if (length(impute_vec) <= opt$num_PCs){
   stop('error num signals < num pcs ')
 }
 
@@ -80,8 +76,8 @@ yrmon_list <- zoo::as.yearmon(paste0(month.abb, " ", opt$impute_yr))
 closeAllConnections()
 
 # Read in the bc-transformed signals 
-bcsignals = fread(paste0(opt$out_path, "bcsignals/bcsignals_none.csv")) 
-bcsignals <- bcsignals[, .SD, .SDcols = c("permno", "yyyymm", opt$impute_vec)]
+bcsignals = fread(paste0(FILEPATHS$data_path, "bcsignals/bcsignals_none.csv")) 
+bcsignals <- bcsignals[, .SD, .SDcols = c("permno", "yyyymm", impute_vec)]
 bcsignals[ , yyyymm := as.yearmon(yyyymm)]  # careful with reading yearmon format from csv!
 
 # find signal update frequency
@@ -349,8 +345,8 @@ bcsignals_bllp = foreach(yearm_cur = ymlist, .combine = rbind) %do% {
 # write to disk ----
 #==============================================================================#
 
-fwrite(bcsignals_bllp, paste0(opt$out_path, 'bcsignals/', opt$out_name))
-
+fwrite(bcsignals_bllp, 
+    paste0(FILEPATHS$data_path, 'bcsignals/bcsignals_bllp', opt$num_PCs, ".csv"))
 
 #==============================================================================#
 # check ----

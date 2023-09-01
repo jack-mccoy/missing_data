@@ -10,6 +10,8 @@ library(data.table)
 library(foreach)
 library(zoo)
 
+source("functions.R")
+
 #==============================================================================#
 # Option parsing ----
 #==============================================================================#
@@ -44,37 +46,29 @@ option_list <- list(
 opt_parser <- optparse::OptionParser(option_list = option_list)
 opt <- optparse::parse_args(opt_parser)
 
-# Get the anomalies as a nice vector
-if (grepl("\\.txt", opt$impute_vec)) {
-  opt$impute_vec <- scan(opt$impute_vec, character())
-} else if (grepl(",", opt$impute_vec)) {
-  opt$impute_vec <- trimws(do.call("c", strsplit(opt$impute_vec, ",")))
-} else {
-  stop("It seems that you did not pass a .txt file or comma-separated list",
-    "to the `impute_vec` argument\n")
-}
-
 # Check that user selected a valid option
 if (!(opt$impute_type %in% c("ind", "indsize", "lastval"))) {
     stop("Option `--impute_type` must be one of (ind, indsize, lastval)\n")
 }
 
-#==============================================================================#
-# Functions ----
-#==============================================================================#
+# Load file paths
+getFilePaths()
 
-source("functions.R")
+# Get the anomalies as a nice vector
+impute_vec <- unpackSignalList(FILEPATHS$signal_list)
 
 #==============================================================================#
 # Data pull ----
 #==============================================================================#
 
 # Read in the signals 
-signals <- fread(paste0(opt$data_path, "bcsignals_none.csv")) 
+signals <- fread(paste0(FILEPATHS$data_path, "bcsignals/bcsignals_none.csv")) 
 signals[, yyyymm := as.yearmon(yyyymm)]
 
 # Read in the other data from CRSP 
-crsp_data <- fread("../data/crsp_data.csv")[, .(permno, yyyymm, hsiccd, me)]
+crsp_data <- fread(FILEPATHS$data_path, "raw/crsp_data.csv")[, 
+    .(permno, yyyymm, hsiccd, me)
+]
 crsp_data[, ":="(
     yyyymm = as.yearmon(yyyymm),
     sic3 = substr(ifelse(hsiccd < 1000, paste0("0", hsiccd), as.character(hsiccd)), 
@@ -83,7 +77,7 @@ crsp_data[, ":="(
 
 signals <- merge(signals, crsp_data, by = c("permno", "yyyymm"))[, 
     .SD, 
-    .SDcols = c("permno", "yyyymm", "sic3", "me", opt$impute_vec)
+    .SDcols = c("permno", "yyyymm", "sic3", "me", impute_vec)
 ]
 
 #==============================================================================#
@@ -111,7 +105,7 @@ if (opt$impute_type %in% c("ind", "indsize")) {
         
         # Select data for given month
         good <- names(checkMinObs( # Get columns we can use
-            signals[yyyymm == i, .SD, .SDcols = opt$impute_vec],
+            signals[yyyymm == i, .SD, .SDcols = impute_vec],
             min_obs = 2
         ))
         
@@ -188,17 +182,17 @@ if (opt$impute_type %in% c("ind", "indsize")) {
     out <- signals[
         order(permno, yyyymm), # order in advance
         .SD,
-        .SDcols = c("permno", "yyyymm", opt$impute_vec)
+        .SDcols = c("permno", "yyyymm", impute_vec)
     ]
     out2 <- copy(out) # for cross-sectional means
     out[, # Use last value for imputation, up to 12 month lag
-        (opt$impute_vec) := lapply(.SD, function(x) imputeLastVal(x, yyyymm, k = 12)),
-        .SDcols = opt$impute_vec,
+        (impute_vec) := lapply(.SD, function(x) imputeLastVal(x, yyyymm, k = 12)),
+        .SDcols = impute_vec,
         by = .(permno)
     ]
     out2[, # Cross-sectional mean imputation
-        (opt$impute_vec) := lapply(.SD, function(x) imputeVec(x)),
-        .SDcols = opt$impute_vec,
+        (impute_vec) := lapply(.SD, function(x) imputeVec(x)),
+        .SDcols = impute_vec,
         by = .(yyyymm)
     ]
 
@@ -207,8 +201,8 @@ if (opt$impute_type %in% c("ind", "indsize")) {
     out2 <- out2[order(permno, yyyymm)]
 
     # If could not impute with last val, use XS mean. Indexing easier with matrix
-    out_mat <- as.matrix(out[, .SD, .SDcols = opt$impute_vec])
-    out2_mat <- as.matrix(out2[, .SD, .SDcols = opt$impute_vec])
+    out_mat <- as.matrix(out[, .SD, .SDcols = impute_vec])
+    out2_mat <- as.matrix(out2[, .SD, .SDcols = impute_vec])
     out_mat[is.na(out_mat)] <- out2_mat[is.na(out_mat)]
     
     # Final for output
@@ -223,5 +217,6 @@ if (opt$impute_type %in% c("ind", "indsize")) {
 # Output ----
 #==============================================================================#
 
-fwrite(out, paste0(opt$data_path, "bcsignals_", opt$impute_type, ".csv"))
+fwrite(out, 
+    paste0(FILEPATHS$data_path, "bcsignals/bcsignals_", opt$impute_type, ".csv"))
 

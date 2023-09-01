@@ -1,5 +1,4 @@
 # extended box-cox transforms signals
-# outputs to opt$out_path/bcsignals_none.csv
 
 #==============================================================================#
 # Setup ----
@@ -14,60 +13,45 @@ source("functions.R")
 closeAllConnections()
 
 #==============================================================================#
-# Option parsing ----
+# Option parsing and file path loading ----
 #==============================================================================#
 
 option_list <- list(
     optparse::make_option(c("--cores_frac"),
         type = "numeric", 
         default = 0.5,
-        help = "fraction of total cores to use"),
-    optparse::make_option(c("--impute_vec"),
-        type = "character", 
-        default = "../data/signals_best150_1985.txt",
-        help = "a comma-separated list of values or .txt file to scan, by default top 150 continuous and gapless"),
-    optparse::make_option(c("--data_path"),
-        type = "character",
-        default = "../data/",
-        help = "path for input data"),
-    optparse::make_option(c("--out_path"),
-        type = "character",
-        default = "../data/",
-        help = "path for output data")
+        help = "fraction of total cores to use")
 )
 
+# Option parser
 opt_parser <- optparse::OptionParser(option_list = option_list)
 opt <- optparse::parse_args(opt_parser)
 
+# Load file paths
+getFilePaths()
+
 # Get the anomalies as a nice vector
-if (grepl("\\.txt", opt$impute_vec)) {
-    opt$impute_vec <- scan(opt$impute_vec, character())
-} else if (grepl(",", opt$impute_vec)) {
-    opt$impute_vec <- trimws(do.call("c", strsplit(opt$impute_vec, ",")))
-} else {
-    stop("It seems that you did not pass a .txt file or comma-separated list",
-        "to the `impute_vec` argument\n")
-}
+impute_vec <- unpackSignalList(FILEPATHS$signal_list)
 
 #==============================================================================#
 # Read in data ----
 #==============================================================================#
 
 # Read in the signals we want 
-signals <- fread(paste0(opt$data_path, "signed_predictors_dl_wide_filtered.csv")) 
+signals <- fread(paste0(FILEPATHS$data_path, "raw/signed_predictors_dl_wide_filtered.csv")) 
 setnames(signals, colnames(signals), tolower(colnames(signals)))
 
 # Ease of use
 signals[, yyyymm := as.yearmon(yyyymm)]
 
 # merge on crsp predictors
-crsp_data <- fread(paste0(opt$data_path, "crsp_data.csv"))
+crsp_data <- fread(paste0(FILEPATHS$data_path, "raw/crsp_data.csv"))
 crsp_data[, yyyymm := as.yearmon(yyyymm)]
 
 signals <- merge(signals, crsp_data, by = c("permno", "yyyymm"))
 
 # keep only those requested in impute_vec (which should be called something more helpful)
-signals <- signals[, .SD, .SDcols = c("permno", "yyyymm", opt$impute_vec)]
+signals <- signals[, .SD, .SDcols = c("permno", "yyyymm", impute_vec)]
 
 # Memory
 rm(crsp_data)
@@ -98,7 +82,7 @@ bctrans <- foreach::"%do%"(foreach::foreach(
             lapply(.SD, function(x) { # has at least two unique observations
               sum(!is.na(x), na.rm = T) >= 2 & length(unique(x[!is.na(x)])) > 2
             }),
-            .SDcols = opt$impute_vec, # the candidate list we passed in
+            .SDcols = impute_vec, # the candidate list we passed in
             by = yyyymm # for each year-month
         ][, 
             !c("yyyymm") # don't want to check this column
@@ -161,15 +145,15 @@ cat("Box-Cox run time:", bc_time, "minutes\n")
 # Output ----
 #==============================================================================#
 
-dir.create(opt$out_path, showWarning=FALSE)
-fwrite(bctrans, paste0(opt$out_path, "bcsignals_none.csv"))
+dir.create(paste0(FILEPATHS$data_path, "bcsignals/"), showWarning=FALSE)
+fwrite(bctrans, paste0(FILEPATHS$data_path, "bcsignals/bcsignals_none.csv"))
 
 #==============================================================================#
 # Checks to console ----
 #==============================================================================#
 
 sum_sd = bctrans[ , lapply(.SD, function(x) {sd(x, na.rm=T)})
-                  , .SDcols = opt$impute_vec
+                  , .SDcols = impute_vec
                   , by = yyyymm
 ]
 

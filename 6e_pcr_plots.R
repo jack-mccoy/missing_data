@@ -11,13 +11,17 @@ library(zoo)
 library(dplyr) 
 library(stringr)
 library(tidyr)
+
 source('functions.R')
 
 #===============================================================================#
 # Hardcodes ----
 #===============================================================================#
 
-pc_ret_path <- '../output/pcr_returns/'
+# Project-level file paths
+getFilePaths()
+
+pc_ret_path <- paste0(FILEPATHS$out_path, "pcr_returns/")
 
 plot_path <- '../output/plots/'
 
@@ -31,7 +35,7 @@ imp_names <- setNames(
 #===============================================================================#
 
 # ff factors
-ff5_mom <- fread('../data/ff5_factors.csv')
+ff5_mom <- fread(paste0(FILEPATHS$data_path, 'raw/ff5_factors.csv'))
 
 # load up specs in pc_ret_path
 spec_dat <- data.table(dir = list.files(pc_ret_path))[, ":="(

@@ -20,13 +20,13 @@ option_list <- list(
         type = "numeric", 
         default = 2020,
         help = "start year of data to impute"),
-    optparse::make_option(c("--out_path"),
-        type = "character", 
-        default = "../output/impute_ests/",
-        help = "directory to store output to"),
-    optparse::make_option(c("--impute_vec"),
-        type = "character", default = "bm,mom6m",
-        help = "a comma-separated list of values or .txt file to scan"),
+    #optparse::make_option(c("--out_path"),
+    #    type = "character", 
+    #    default = "../output/impute_ests/",
+    #    help = "directory to store output to"),
+    #optparse::make_option(c("--impute_vec"),
+    #    type = "character", default = "bm,mom6m",
+    #    help = "a comma-separated list of values or .txt file to scan"),
     optparse::make_option(c("--maxiter"),
         type = "numeric", default = 10000,
         help = "a numeric value for the maximumum number of EM iterations"),
@@ -39,14 +39,7 @@ opt_parser <- optparse::OptionParser(option_list = option_list)
 opt <- optparse::parse_args(opt_parser)
 
 # Get the anomalies as a nice vector
-if (grepl("\\.txt", opt$impute_vec)) {
-  opt$impute_vec <- scan(opt$impute_vec, character())
-} else if (grepl(",", opt$impute_vec)) {
-  opt$impute_vec <- trimws(do.call("c", strsplit(opt$impute_vec, ",")))
-} else {
-  stop("It seems that you did not pass a .txt file or comma-separated list",
-    "to the `impute_vec` argument\n")
-}
+impute_vec <- unpackSignalList(FILEPATHS$signal_list)
 
 # Years and months to impute
 yrmons <- seq(
@@ -62,7 +55,7 @@ yrmons <- seq(
 # Signals data ====
 
 # Read in the signals we want 
-signals <- fread(paste0(opt$out_path, "bcsignals_none.csv")) 
+signals <- fread(paste0(FILEPATHS$data_path, "bcsignals/bcsignals_none.csv")) 
 setnames(signals, colnames(signals), tolower(colnames(signals)))
 
 # Convert to proper yearmon format
@@ -77,7 +70,7 @@ signals_good <- names(which(sapply( # `which` filters out the `FALSE` results
         lapply(.SD, function(x) { # has at least two unique observations
             sum(!is.na(x), na.rm = T) >= 2 & length(unique(x[!is.na(x)])) > 2
         }),
-        .SDcols = opt$impute_vec, # the candidate list we passed in
+        .SDcols = impute_vec, # the candidate list we passed in
         by = yyyymm # for each year-month
     ][, 
         !c("yyyymm") # don't want to check this column
@@ -164,5 +157,5 @@ imp_pc <- foreach::"%dopar%"(foreach::foreach(i = yrmons), {
 out_data <- rbindlist(imp_pc, fill = TRUE)
 
 # Output
-fwrite(out_data, paste0(opt$out_path, "bcsignals_ppca", opt$n_pcs, ".csv"))
+fwrite(out_data, paste0(FILEPATHS$data_path, "bcsignals_ppca", opt$n_pcs, ".csv"))
 
