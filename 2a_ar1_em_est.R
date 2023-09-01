@@ -12,6 +12,8 @@ library(RPostgres) # SQL query to WRDS
 library(zoo) # yearmon convention is nice to work with here
 library(tidyverse) # sorry Jack
 
+source("functions.R")
+
 #==============================================================================#
 # Option parsing ----
 #==============================================================================#
