@@ -38,6 +38,9 @@ option_list <- list(
 opt_parser <- optparse::OptionParser(option_list = option_list)
 opt <- optparse::parse_args(opt_parser)
 
+# Get file paths
+getFilePaths()
+
 # Get the anomalies as a nice vector
 impute_vec <- unpackSignalList(FILEPATHS$signal_list)
 

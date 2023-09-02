@@ -83,6 +83,6 @@ table_vw <- dcast(ls_ports_mean, "imp ~ method", value.var = "vw")
 dir.create(paste0(FILEPATHS$out_path, "tables"))
 
 fwrite(table_ew, paste0(FILEPATHS$out_path, 'tables/fcast_table_ew.csv'))
-fwrite(table_vw, paste0(FILEPATHS$out_path, 'tables/fcast_table_vw.csv')
+fwrite(table_vw, paste0(FILEPATHS$out_path, 'tables/fcast_table_vw.csv'))
 
 
