@@ -373,6 +373,3 @@ temptab = tempsum %>%
   arrange(year) %>% 
   pivot_longer(cols = -year)
 
-View(temptab)
-
-
