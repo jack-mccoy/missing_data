@@ -35,6 +35,35 @@ wrds <- DBI::dbConnect(RPostgres::Postgres(),
     pass = wrds_pass)
 
 #==============================================================================#
+# Size breakpoints from Ken French
+#==============================================================================#
+
+# Website path
+size_path <- "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/ME_Breakpoints_CSV.zip"
+
+# Download and unzip
+download.file(size_path, paste0(FILEPATHS$data_path, 'raw/deleteme.zip'))
+unzip(paste0(FILEPATHS$data_path, 'raw/deleteme.zip'), 
+    exdir = paste0(FILEPATHS$data_path, 'raw/'))
+file.remove(paste0(FILEPATHS$data_path, 'raw/deleteme.zip'))
+
+# Read in data and clean ====
+
+size_quantiles <- fread(paste0(FILEPATHS$data_path, 'raw/ME_Breakpoints.CSV'),
+    skip = 1,
+    col.names = c("yyyymm", "n", seq(5, 100, by = 5)))
+
+# Match the other yyyymm formats
+size_quantiles[,.(as.yearmon(as.character(yyyymm*10+1), format="%Y%m%d"))]
+
+# Output just the ones we need
+fwrite(size_quantiles[, .SD, .SDcols = c("yyyymm", 20, 50)],
+    paste0(FILEPATHS$data_path, "raw/ME_Breakpoints_20_50_clean.csv"))
+
+# memory
+rm(size_quantiles)
+
+#==============================================================================#
 # Download CRSP ====
 #==============================================================================#
 
