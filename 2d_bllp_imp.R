@@ -160,6 +160,12 @@ impute_one_month = function(yearm_cur){
 
   cov_ac = cov(signalmat, use = 'pairwise.complete.obs')
   
+  # error handling 
+  # if no overlapping obs, replace with zero
+  if (any(is.na(cov_ac))){
+    cov_ac[is.na(cov_ac)] = 0
+  }
+  
   # find preliminary loadings Lambda (num_signals x num_PCs)
   Lamtil = eigen(cov_ac)$vectors[ , 1:opt$num_PCs]
   rownames(Lamtil) = colnames(signalmat)
