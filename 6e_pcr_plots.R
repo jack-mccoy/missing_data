@@ -21,12 +21,14 @@ source('functions.R')
 # Project-level file paths
 getFilePaths()
 
-pc_ret_path <- paste0(FILEPATHS$data_path, "pcr_returns/")
+pc_ret_path <- paste0(FILEPATHS$out_path, "pca_returns/")
 plot_path <- paste0(FILEPATHS$out_path, 'plots/')
 
+dir.create(plot_path, showWarnings = FALSE)
+
 imp_names <- setNames(
-    c("EM Algo","Simple Mean","BLLP loc B-XS"),
-    c("em","mn","bllp")
+    c("EM Algo","Simple Mean","BLLP loc B-XS", "pPCA-10"),
+    c("em","none","bllp6", "ppca10")
 )
 
 #===============================================================================#
@@ -38,14 +40,14 @@ ff5_mom <- fread(paste0(FILEPATHS$data_path, 'raw/ff5_factors.csv'))
 
 # load up specs in pc_ret_path
 spec_dat <- data.table(dir = list.files(pc_ret_path))[, ":="(
-    forecast = str_split_fixed(dir, '_', 2)[,1],
-    imp = str_split_fixed(dir, '_', 2)[,2]
+    forecast = str_split_fixed(basename(dir), '_', 2)[,1],
+    imp = str_split_fixed(basename(dir), '_', 2)[,2]
 )]
  
 # function for importing one spec
 import_ret_csv <- function(cur_spec) {
   
-    list_csv_files <- list.files(path =paste0(pc_ret_path,cur_spec$dir), 
+    list_csv_files <- list.files(path = paste0(pc_ret_path,cur_spec$dir), 
         full.names = TRUE)
     ret <- lapply(list_csv_files,
         function(fname){
@@ -157,8 +159,8 @@ for (cur_fore in fore_list) {
           colour = guide_legend(order = 1),
           linetype = guide_legend(order = 2)
         ) +
-        scale_linetype_manual(values = c('solid', 'longdash', 'dotted')) +
-        scale_size_manual(values = c(0.8, 0.8, 0.5)) +
+        scale_linetype_manual(values = c('solid', 'longdash', 'dotted', 'dotdash')) +
+        scale_size_manual(values = c(0.8, 0.8, 0.5, 0.5)) +
         scale_color_manual(values = c(MATRED, MATBLUE))
   
     # Specific plots
@@ -193,66 +195,7 @@ for (cur_fore in fore_list) {
     
 }
 
-#for (cur_imp in imp_list) {
-#  
-#  # All the line plots will have same basic look
-#    plot_base <- ggplot(sum_data[imp == cur_imp], 
-#            aes(x = pc, colour = weighting, linetype = forecast)) + 
-#        theme_bw() + 
-#        theme(
-#            legend.position = c(27, 85)/100,
-#            legend.background = element_blank(),
-#            legend.key = element_blank(),
-#            legend.spacing.y = unit(0.01, 'cm'),
-#            legend.spacing.x = unit(0.2, 'cm'),
-#            legend.box = 'horizontal',
-#            legend.key.size = unit(0.4, 'cm'),
-#            legend.text = element_text(size = 8),
-#            legend.title = element_text(size = 9)
-#        ) + 
-#        labs(
-#          colour = "Stock Weights",
-#          linetype = "Forecast",
-#          x = "Number of PCs"
-#        ) +
-#        guides(
-#          colour = guide_legend(order = 1),
-#          linetype = guide_legend(order = 2)
-#        ) +
-#        #scale_linetype_manual(values = c('solid', 'longdash', 'dotted')) +
-#        #scale_size_manual(values = c(0.8, 0.8, 0.5)) +
-#        scale_color_manual(values = c(MATRED, MATBLUE))
-#  
-#    # Specific plots
-#    mn <- plot_base + geom_line(aes(y = rbar)) + 
-#        ylab("Annualized Mean Return (%)")
-#    stdev <- plot_base + geom_line(aes(y = vol)) +
-#        ylab("Annualized Std. Dev. (%)") 
-#    sharpe <- plot_base + geom_line(aes(y = sharpe)) + 
-#        ylab("Annualized Sharpe Ratio") 
-#    alpha_capm <- plot_base + geom_line(aes(y = alpha_capm)) +
-#        ylab('Annualized CAPM Alpha (%)')
-#    alpha_ff5 <- plot_base + geom_line(aes(y = alpha_ff5)) +
-#        ylab('Annualized FF5 + Mom Alpha (%)')
-#  
-#    ggsave(plot = mn,
-#        filename = paste0(plot_path, cur_imp, "_expected_rets.pdf"),
-#        width = 8, height = 5, unit = "in", scale = scale_gg)
-#  
-#    ggsave(plot = sharpe, 
-#        filename = paste0(plot_path, cur_imp, "_sharpes.pdf"),
-#        width = 8, height = 5, unit = "in", scale = scale_gg)
-#    
-#    ggsave(plot = alpha_capm,
-#        filename = paste0(plot_path, cur_imp, "_alpha_capm.pdf"),
-#        width = 8, height = 5, unit = "in", scale = scale_gg)
-#    
-#    ggsave(plot = alpha_ff5, 
-#        filename = paste0(plot_path, cur_imp, "_alpha_ff5_mom.pdf"),
-#        width = 8, height = 5, unit = "in", scale = scale_gg)
-#    
-#}
-
+stop()
 
 # Cumulative returns over time ----
 

@@ -6,7 +6,7 @@ mods=("keras1" "keras2" "keras3" "keras4" "keras5" "lightgbm" "lm" "pcr" "spcr")
 #imps=("none" "em" "emar1" "ppca67" "ind" "indsize" "lastval")
 # "bllp" NOTE: need to add later when done
 #imps=("none" "ind" "indsize" "lastval" "ppca55")
-imps=("bllp6")
+imps=("ppca6")
 
 yearm_begin="1995-06"
 yearm_end="2020-06"

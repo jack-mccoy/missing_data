@@ -160,5 +160,5 @@ imp_pc <- foreach::"%dopar%"(foreach::foreach(i = yrmons), {
 out_data <- rbindlist(imp_pc, fill = TRUE)
 
 # Output
-fwrite(out_data, paste0(FILEPATHS$data_path, "bcsignals_ppca", opt$n_pcs, ".csv"))
+fwrite(out_data, paste0(FILEPATHS$data_path, "bcsignals/bcsignals_ppca", opt$n_pcs, ".csv"))
 

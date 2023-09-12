@@ -7,6 +7,7 @@
 library(doParallel)
 library(data.table)
 library(foreach)
+library(stringr)
 library(zoo)
 
 closeAllConnections()
@@ -21,41 +22,41 @@ source("functions.R")
 on_cluster = Sys.getenv('SGE_TASK_ID') != ""
 
 option_list <- list(
-  #optparse::make_option(c("--out_path"),
-  #  type = "character", default = "../output/pca_returns/em/",
-  #  help = "directory to store output to"),
-  #optparse::make_option(c("--signals_keep"),
-  #  type = "character", default = "../output/signals_10.txt",
-  #  help = "a comma-separated list of values or .txt file to scan"),
-  optparse::make_option(c("--signal_file"),
-    type = "character", default = "bcsignals_em.csv",
-    help = "path of imputed file"),
-  optparse::make_option(c("--iter_year"),
-    type = "numeric", default = 1990,
-    help = "year for making prediction (numeric)"),
-  optparse::make_option(c("--iter_month"),
-    type = "numeric", 
-    default = ifelse(on_cluster, as.integer(Sys.getenv("SGE_TASK_ID")), 5),
-    help = "month for making prediction (numeric)"),
-  optparse::make_option(c("--n_yrs"),
-    type = "numeric", default = 7,
-    help = "number of years to run for Fama-Macbeth principal component regressions"),
-  optparse::make_option(c("--scaled_pca"),
-    type = "logical", default = FALSE,
-    help = "logical to indicate if Huang et al 2022 scaled pca should be used"),  
-  optparse::make_option(c("--scaled_pca_weight"),
-    type = "character", default = "ew",
-    help = "ew or vw: allows value-weighted scaled pca"),
-  optparse::make_option(c("--quantile_prob"),
-    type = "numeric", default = 0.2,
-    help = paste0("the ratio out of 1 used to form long-short portfolios ",
-        "(i.e., 0.2 means quintile portfolios)")),
-  optparse::make_option(c("--n_pcs"),
-    type = "numeric", default = 25,
-    help = "maximum number of principal components to use in PCRs"),
-  optparse::make_option(c("--cores_frac"),
-    type = "numeric", default = 1.0,
-    help = "fraction of total cores to use")
+    #optparse::make_option(c("--out_path"),
+    #    type = "character", default = "../output/pca_returns/em/",
+    #    help = "directory to store output to"),
+    #optparse::make_option(c("--signals_keep"),
+    #    type = "character", default = "../output/signals_10.txt",
+    #    help = "a comma-separated list of values or .txt file to scan"),
+    optparse::make_option(c("--signal_file"),
+        type = "character", default = "bcsignals_em.csv",
+        help = "path of imputed file"),
+    optparse::make_option(c("--iter_year"),
+        type = "numeric", default = 1990,
+        help = "year for making prediction (numeric)"),
+    optparse::make_option(c("--iter_month"),
+        type = "numeric", 
+        default = ifelse(on_cluster, as.integer(Sys.getenv("SGE_TASK_ID")), 5),
+        help = "month for making prediction (numeric)"),
+    optparse::make_option(c("--n_yrs"),
+        type = "numeric", default = 7,
+        help = "number of years to run for Fama-Macbeth principal component regressions"),
+    optparse::make_option(c("--scaled_pca"),
+        type = "logical", default = FALSE,
+        help = "logical to indicate if Huang et al 2022 scaled pca should be used"),  
+    optparse::make_option(c("--scaled_pca_weight"),
+        type = "character", default = "ew",
+        help = "ew or vw: allows value-weighted scaled pca"),
+    optparse::make_option(c("--quantile_prob"),
+        type = "numeric", default = 0.2,
+        help = paste0("the ratio out of 1 used to form long-short portfolios ",
+            "(i.e., 0.2 means quintile portfolios)")),
+    optparse::make_option(c("--n_pcs"),
+        type = "numeric", default = 25,
+        help = "maximum number of principal components to use in PCRs"),
+    optparse::make_option(c("--cores_frac"),
+        type = "numeric", default = 1.0,
+        help = "fraction of total cores to use")
 )
 
 opt_parser <- optparse::OptionParser(option_list = option_list)
@@ -84,7 +85,9 @@ cat("PC regressions for ", as.character(pred_mon), "\n")
 signals <- fread(paste0(FILEPATHS$data_path, "bcsignals/", opt$signal_file))
 setnames(signals, colnames(signals), tolower(colnames(signals))) # ensure lower
 
-crsp_data <- fread("../data/crsp_data.csv")[, .(permno, yyyymm, ret, me)]
+crsp_data <- fread(paste0(FILEPATHS$data_path, "raw/crsp_data.csv"))[, 
+    .(permno, yyyymm, ret, me)
+]
 signals <- merge(signals, crsp_data, by = c("permno", "yyyymm"))
 
 # Memory
@@ -134,34 +137,34 @@ if (opt$scaled_pca){
   
     # set up weights
     if (opt$scaled_pca_weight == 'ew'){
-      signals$tempw = 1
+        signals$tempw = 1
     } else if (opt$scaled_pca_weight == 'vw') {
-      signals$tempw = signals$me
+        signals$tempw = signals$me
     } else {
-      stop('opt$scaled_pca_weight invalid')
+        stop('opt$scaled_pca_weight invalid')
     }
     
     # regress bh1m on each signal, dropping current month's bh1m
     temp = lapply(
-      signals_keep,
-      function(signalname){
-        summary(lm(
-          paste0('bh1m ~ ', signalname), signals[time_avail_m < pred_mon]
-          , weights = tempw
-        ))$coefficients[signalname, 'Estimate']
-      }
+        signals_keep,
+        function(signalname){
+            summary(lm(
+                paste0('bh1m ~ ', signalname), signals[time_avail_m < pred_mon],
+                weights = tempw
+            ))$coefficients[signalname, 'Estimate']
+        }
     )
-    slopedat = data.table(
-      signalname = signals_keep,
-      slope = as.numeric(temp)
+    slopedat <- data.table(
+        signalname = signals_keep,
+        slope = as.numeric(temp)
     )
     
     # re-scale with slope
-    slopemat = matrix(1, dim(signals)[1], 1) %*% t(as.matrix(slopedat$slope))
+    slopemat <- matrix(1, dim(signals)[1], 1) %*% t(as.matrix(slopedat$slope))
     
-    signals = cbind(
-      signals[ , .SD, .SDcols = signals_keep] * slopemat,
-      signals[ , .SD, .SDcols = !signals_keep] 
+    signals <- cbind(
+        signals[ , .SD, .SDcols = signals_keep] * slopemat,
+        signals[ , .SD, .SDcols = !signals_keep] 
     )
     pc <- prcomp(signals[, .SD, .SDcols = signals_keep], 
         center = FALSE, scale = FALSE)
@@ -184,7 +187,7 @@ rm(signals, pc) # Memory
 
 # Regressions in parallel to speed things up
 
-ncores = floor(parallel::detectCores()*opt$cores_frac)
+ncores <- floor(parallel::detectCores()*opt$cores_frac)
 doParallel::registerDoParallel(cores = ncores)
 
 pcr_pred <- foreach::"%dopar%"(foreach::foreach(
@@ -236,22 +239,33 @@ pcr_pred <- foreach::"%dopar%"(foreach::foreach(
 # Output ----
 #==============================================================================#
 
-# Automatic output folder based on dataset
-outfolder <- str_remove(basename(opt$signal_file), '.csv')
+if (opt$scaled_pca) {
+    if (opt$scaled_pca_weight == "ew") {
+        fcast <- "spca1"
+    } else {
+        fcast <- "spca2"
+    }
+} else {
+    fcast <- "pca"
+}
 
-dir.create(paste0(FILEPATHS$data_path, "pca_returns/"), showWarnings = FALSE)
-dir.create(paste0(FILEPATHS$data_path, "pca_returns/", outfolder),
+# Automatic output folder based on dataset
+outfolder <- paste0( # Name based on forecast and imputation
+    fcast, "_", 
+    str_remove(str_remove(basename(opt$signal_file), '.csv'), "bcsignals_")
+)
+
+dir.create(paste0(FILEPATHS$out_path, "pca_returns/"), showWarnings = FALSE)
+dir.create(paste0(FILEPATHS$out_path, "pca_returns/", outfolder),
     showWarnings = FALSE)
 
 fwrite(
     rbindlist(pcr_pred)[, n_signals := length(signals_keep)], 
     paste0(
-        FILEPATHS$data_path, 
+        FILEPATHS$out_path, 
         "pca_returns/",
         outfolder,
-        'pca_returns/ret_pc_',
-        format(pred_mon, '%Y_%m'),
-        '.csv'
+        '/ret_pc_', format(pred_mon, '%Y_%m'), '.csv'
     )
 )
 
