@@ -17,10 +17,16 @@ getFilePaths(signal_list_exists = FALSE) # signal list not yet made
 # Create directory for downloaded data that has not been transformed or imputed
 dir.create(paste0(FILEPATHS$data_path, "raw/"), showWarnings = FALSE)
 
-# log in ----
-wrds_user <- getPass::getPass("WRDS username: ")
-wrds_pass <- getPass::getPass("WRDS pass: ")
+# log in if .pgpass not set up (better to have it set up) ----
+if (file.exists("~/.pgpass")) {
+    wrds_user <- NULL
+    wrds_pass <- NULL
+} else {
+    wrds_user <- getPass::getPass("WRDS username: ")
+    wrds_pass <- getPass::getPass("WRDS pass: ")
+}
 
+# Set up connection
 wrds <- DBI::dbConnect(RPostgres::Postgres(),
     host = "wrds-pgdata.wharton.upenn.edu",
     db = "wrds",
