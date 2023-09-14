@@ -35,26 +35,30 @@ repulldata = TRUE # use F if debugging and impatient
 
 # command line options
 optcmd <- optparse::OptionParser(
-  option_list = list(
-    optparse::make_option(c("--model"),
-                          type = "character", default = "pcr",
-                          help = "'ranger', 'lm', 'lightgbm' or 'keras1'-'keras4' or 'pcr' or 'spcr' "),
-    optparse::make_option(c("--signal_file"),
-                          type = "character", default = "bcsignals_none.csv",
-                          help = "permno-month-signal csv"),
-    optparse::make_option(c("--output_folder"),
-                          type = "character", default = 'auto',
-                          help = "results go here.  use 'auto' to auto-generate"),
-    #optparse::make_option(c("--outroot"), # need flexibility because of storage limits
-    #    type = "character", default = "../output/forecast/",
-    #    help = "root of output path"),
-    optparse::make_option(c("--yearm_begin"),
-                          type = "character", default = '1995-06',
-                          help = "first in-sample end"),
-    optparse::make_option(c("--yearm_end"),
-                          type = "character", default = '2020-06',
-                          help = "last in-sample end")
-  )
+    option_list = list(
+        optparse::make_option(c("--model"),
+            type = "character", default = "pcr",
+            help = "'ranger', 'lm', 'lightgbm' or 'keras1'-'keras4' or 'pcr' or 'spcr' "),
+        optparse::make_option(c("--signal_file"),
+            type = "character", default = "bcsignals_none.csv",
+            help = "permno-month-signal csv"),
+        optparse::make_option(c("--firmset"),
+            type = "character", default = "bcsignals_none.csv",
+            help = paste0(
+                "firm set to impute. one of (micro,small,big,all). ",
+                "micro is below 20th ptile NYSE ME, small is 20th to 50th, ",
+                "and big is 50th and above."
+            )),
+        optparse::make_option(c("--output_folder"),
+            type = "character", default = 'auto',
+            help = "results go here.  use 'auto' to auto-generate"),
+        optparse::make_option(c("--yearm_begin"),
+            type = "character", default = '1995-06',
+            help = "first in-sample end"),
+        optparse::make_option(c("--yearm_end"),
+            type = "character", default = '2020-06',
+            help = "last in-sample end")
+    )
 )  %>% optparse::parse_args()
 
 # other options (too lazy to add to parser)
@@ -118,54 +122,64 @@ optspcr = list(
 #==============================================================================#
 
 if (repulldata) {# Read in data 
-  dat <- fread(paste0(FILEPATHS$data_path, "bcsignals/", opt$signal_file))
-  setnames(dat, colnames(dat), tolower(colnames(dat))) # ensure lower
-  dat[, yyyymm := as.yearmon(yyyymm)]
-  
-  # bcsignals_none.csv seems to have crsp info stuff that we should remove
-  if ('me' %in% colnames(dat)){
-    dat[ , ':=' (me = NULL)]
-  }
-  
-  crsp_data <- fread("../data/crsp_data.csv")[, .(permno, yyyymm, me, ret)] 
-  crsp_data[ , yyyymm := as.yearmon(yyyymm)]
-  
-  # split crsp into known and unknown
-  crsp_info = crsp_data %>% select(permno, yyyymm, me)
-  crsp_bh1m = crsp_data %>% select(permno, yyyymm, ret) %>% 
-    mutate(yyyymm := yyyymm - 1/12) %>% 
-    rename(bh1m = ret)
-  
-  dat <- merge(dat, crsp_info, by = c("permno", "yyyymm"), all.x = T)
-  dat <- merge(crsp_bh1m, dat, by = c("permno", "yyyymm"), all.x = T)
-  
-  # Memory
-  rm(crsp_data, crsp_info, crsp_bh1m)
-  
-  # Simple mean imputations. Shouldn't matter for EM-imputed data
-  # Easiest to just catch it all here for non-imputed data
-  # should be a cleaner way to do this
-  signals_list = names(dat) %>% setdiff(c('permno','yyyymm','sic3','me','bh1m'))
-  
-  # subset to select ones for debugging
-  if (!is.null(signals_keep)){
-    signals_list = intersect(signals_keep, signals_list)
-  }
-  
-  imputeVec <- function(x, na.rm = T) {
-    x[is.na(x)] <- mean(x, na.rm = na.rm)
-    return(x)
-  }
-  dat[,
-      (signals_list) := lapply(.SD, imputeVec, na.rm = T),
-      .SDcols = signals_list,
-      by = .(yyyymm)
-  ]
-  
-  # keep only complete cases
-  dat <- dat[complete.cases(
-    dat[, .SD, .SDcols = c("permno", "yyyymm", "bh1m", "me", signals_list)]
-  )]
+    dat <- fread(paste0(FILEPATHS$data_path, "bcsignals/", opt$signal_file))
+    setnames(dat, colnames(dat), tolower(colnames(dat))) # ensure lower
+    dat[, yyyymm := as.yearmon(yyyymm)]
+    
+    # bcsignals_none.csv seems to have crsp info stuff that we should remove
+    if ('me' %in% colnames(dat)){
+      dat[ , ':=' (me = NULL)]
+    }
+    
+    crsp_data <- fread(paste0(FILEPATHS$data_path, "raw/crsp_data.csv"))[, 
+      .(permno, yyyymm, me, ret)
+]   
+    crsp_data[ , yyyymm := as.yearmon(yyyymm)]
+    
+    # split crsp into known and unknown
+    crsp_info = crsp_data %>% select(permno, yyyymm, me)
+    crsp_bh1m = crsp_data %>% select(permno, yyyymm, ret) %>% 
+      mutate(yyyymm := yyyymm - 1/12) %>% 
+      rename(bh1m = ret)
+    
+    dat <- merge(dat, crsp_info, by = c("permno", "yyyymm"), all.x = T)
+    dat <- merge(crsp_bh1m, dat, by = c("permno", "yyyymm"), all.x = T)
+    
+    # Memory
+    rm(crsp_data, crsp_info, crsp_bh1m)
+    
+    # Simple mean imputations. Shouldn't matter for EM-imputed data
+    # Easiest to just catch it all here for non-imputed data
+    # should be a cleaner way to do this
+    signals_list = names(dat) %>% setdiff(c('permno','yyyymm','sic3','me','bh1m'))
+    
+    # subset to select ones for debugging
+    if (!is.null(signals_keep)){
+        signals_list <- intersect(signals_keep, signals_list)
+    }
+    
+    # Simple mean impute to catch any still-missing data
+    dat[,
+        (signals_list) := lapply(.SD, imputeVec, na.rm = T),
+        .SDcols = signals_list,
+        by = .(yyyymm)
+    ]
+    
+    # keep only complete cases
+    dat <- dat[complete.cases(
+        dat[, .SD, .SDcols = c("permno", "yyyymm", "bh1m", "me", signals_list)]
+    )]
+
+    # Filter firmset here *after* simple mean impute, 
+    # so that we always follow order (impute all together) -> (filter) -> (predict)
+    if (opt$firmset %in% c("micro", "small", "big")) {
+        dat <- filterFirms(dat, opt$firmset, FILEPATHS)
+    } else {
+        if (opt$firmset != "all") {
+            warning("`--firmset` was not correctly specified as one of (micro,small,big,all)!\n")
+        }
+        cat("Estimating for all firms...\n")
+    }
 }
 
 
@@ -204,6 +218,7 @@ if (opt$output_folder == 'auto') {
     outfolder = paste(
         opt$model,
         str_remove(basename(opt$signal_file), '.csv'),
+        opt$firmset,
         sep = '-'
     )
 } else {

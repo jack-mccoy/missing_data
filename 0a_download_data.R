@@ -51,13 +51,13 @@ file.remove(paste0(FILEPATHS$data_path, 'raw/deleteme.zip'))
 
 size_quantiles <- fread(paste0(FILEPATHS$data_path, 'raw/ME_Breakpoints.CSV'),
     skip = 1,
-    col.names = c("yyyymm", "n", seq(5, 100, by = 5)))
+    col.names = c("yyyymm", "n", paste0("p", seq(5, 100, by = 5))))
 
 # Match the other yyyymm formats
-size_quantiles[,.(as.yearmon(as.character(yyyymm*10+1), format="%Y%m%d"))]
+size_quantiles[, yyyymm := as.yearmon(as.character(yyyymm*10+1), format="%Y%m%d")]
 
 # Output just the ones we need
-fwrite(size_quantiles[, .SD, .SDcols = c("yyyymm", 20, 50)],
+fwrite(size_quantiles[, .SD, .SDcols = c("yyyymm", "p20", "p50")],
     paste0(FILEPATHS$data_path, "raw/ME_Breakpoints_20_50_clean.csv"))
 
 # memory

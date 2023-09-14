@@ -20,19 +20,19 @@ option_list <- list(
         type = "numeric", 
         default = 2020,
         help = "start year of data to impute"),
-    #optparse::make_option(c("--out_path"),
-    #    type = "character", 
-    #    default = "../output/impute_ests/",
-    #    help = "directory to store output to"),
-    #optparse::make_option(c("--impute_vec"),
-    #    type = "character", default = "bm,mom6m",
-    #    help = "a comma-separated list of values or .txt file to scan"),
     optparse::make_option(c("--maxiter"),
         type = "numeric", default = 10000,
         help = "a numeric value for the maximumum number of EM iterations"),
     optparse::make_option(c("--n_pcs"),
         type = "numeric", default = 2,
-        help = "number of principal components to estimate")
+        help = "number of principal components to estimate"),
+    optparse::make_option(c("--firmset"),
+        type = "character", default = "big",
+        help = paste0(
+            "firm set to impute. one of (micro,small,big,all). ",
+            "micro is below 20th ptile NYSE ME, small is 20th to 50th, ",
+            "and big is 50th and above."
+        ))
 )
 
 opt_parser <- optparse::OptionParser(option_list = option_list)
@@ -67,6 +67,28 @@ signals[, yyyymm := as.yearmon(yyyymm)]
 # Filter to desired data sample
 signals <- signals[yyyymm %in% yrmons]
 
+# Returns data ====
+
+crsp_data <- fread(paste0(FILEPATHS$data_path, "raw/crsp_data.csv"))[,
+    .(permno, yyyymm, ret, me)
+]
+crsp_data[, yyyymm := as.yearmon(yyyymm)]
+
+# Combine and filter to firm set ====
+
+signals <- merge(signals, crsp_data, by = c("permno", "yyyymm"))
+
+if (opt$firmset %in% c("micro", "small", "big")) {
+    signals <- filterFirms(signals, opt$firmset, FILEPATHS)
+} else {
+    if (opt$firmset != "all") {
+        warning("`--firmset` was not correctly specified as one of (micro,small,big,all)!\n")
+    }
+    cat("Imputing for all firms...\n")
+}
+
+# Safety check here because usable signals will be firmset-specific ====
+
 # A safety check to make sure we don't have any signals with a month of <2 obs
 signals_good <- names(which(sapply( # `which` filters out the `FALSE` results
     signals[,
@@ -86,28 +108,6 @@ signals <- signals[, .SD, .SDcols = c("permno", "yyyymm", signals_good)]
 
 # For checking in log
 cat("There are a total of", length(signals_good), "signals with enough data.\n")
-print(signals_good)
-
-print(head(signals))
-
-# Returns data ====
-
-crsp_data <- fread("../data/crsp_data.csv")[, .(permno, yyyymm, ret, me)]
-crsp_data[, yyyymm := as.yearmon(yyyymm)]
-
-# Combine ====
-
-signals <- merge(signals, crsp_data, by = c("permno", "yyyymm"))
-
-# Align signals with next month's returns
-signals[
-    order(permno, yyyymm),
-    bh1m := shift(ret, 1, type = "lead"), # we want to predict next month's ret
-    by = permno
-]
-
-# Define 'time_avail_m': the month of return prediction where signal was available
-signals[, time_avail_m := yyyymm + 1/12]
 
 #===============================================================================
 # Estimate the model and impute for each month
@@ -124,7 +124,7 @@ imp_pc <- foreach::"%dopar%"(foreach::foreach(i = yrmons), {
     signals_i <- signals[yyyymm == i]
     
     # Estimate the PPCA model
-    pc <- pca(signals_i[,.SD, .SDcols = signals_good],
+    pc <- pca(as.matrix(signals_i[,.SD, .SDcols = signals_good]),
         method = 'ppca',
         nPcs = opt$n_pcs,
         seed = 0, # Consistency
@@ -160,5 +160,6 @@ imp_pc <- foreach::"%dopar%"(foreach::foreach(i = yrmons), {
 out_data <- rbindlist(imp_pc, fill = TRUE)
 
 # Output
-fwrite(out_data, paste0(FILEPATHS$data_path, "bcsignals/bcsignals_ppca", opt$n_pcs, ".csv"))
+fwrite(out_data, 
+    paste0(FILEPATHS$data_path, "bcsignals/bcsignals_ppca", opt$n_pcs, "_", opt$firmset, ".csv"))
 

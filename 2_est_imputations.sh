@@ -21,14 +21,15 @@ fi
 
 if [ $1 = "ppca" ]; then
     Rscript --grid_submit=batch \
-        --grid_mem=800G \
+        --grid_mem=500G \
         --grid_ncpus=12 \
         --grid_email=$user_email\
         2c_ppca_est.R \
             --start_yr=1985 \
             --end_yr=2020 \
             --maxiter=100000 \
-            --n_pcs=$2
+            --n_pcs=$2 \
+            --firmset=$3
 fi
 
 if [ $1 = "bllp" ]; then

@@ -27,9 +27,17 @@ crsp_data <- fread(paste0(FILEPATHS$data_path, "raw/crsp_data.csv"))[, c("permno
 fcast_data <- rbindlist(lapply(fcasts, function(f) { 
     file <- paste0(fcast_dir, f, "/permno-month-forecast.csv")
     method <- stringr::str_split(f, "-")[[1]][1]
-    imp <- stringr::str_split(f, "_")[[1]][2]
-    dt <- tryCatch(fread(file)[, ":="(method = method, imp = imp)], 
-        error = function(e) return(NULL))
+    imp <- regmatches(f, regexpr("_", f), invert = TRUE)[[1]][2]
+    firmset <- stringr::str_split(f, "-")[[1]][3]
+    dt <- fread(file)[, ":="(
+        method = method,
+        imp = ifelse(!is.na(firmset), gsub(paste0("-", firmset), "", imp), imp),
+        firmset = dplyr::case_when(
+            is.na(firmset) ~ "all",
+            firmset %in% c("micro", "small", "big") ~ "separate",
+            TRUE ~ firmset
+        )
+    )]
     return(dt)
 }))
 
@@ -46,7 +54,7 @@ fcast_data[,
         pctile10 = quantile(Ebh1m, 0.1, na.rm = TRUE),
         pctile90 = quantile(Ebh1m, 0.9, na.rm = TRUE)
     ),
-    by = .(yyyymm, method, imp)
+    by = .(yyyymm, method, imp, firmset)
 ][,
     decile := ifelse(Ebh1m <= pctile10, 1, ifelse(Ebh1m >= pctile90, 10, NA)) 
 ]
@@ -59,21 +67,21 @@ ports <- fcast_data[
         ew = mean(ifelse(decile == 1, -1, 1) * bh1m, na.rm = TRUE),
         vw = weighted.mean(ifelse(decile == 1, -1, 1) * bh1m, w = me, na.rm = T)
     ),
-    by = .(yyyymm, method, imp, decile)
+    by = .(yyyymm, method, imp, firmset, decile)
 ]
 
 # Mean portfolios for each leg
-ports_mean <- ports[, .(ew = mean(ew), vw = mean(vw)), by = .(method, imp, decile)]
+ports_mean <- ports[, .(ew = mean(ew), vw = mean(vw)), by = .(method, imp, firmset, decile)]
 
 # Long-short portfolios (annualized)
 ls_ports_mean <- ports_mean[, 
     .(ew = 12*sum(ew), vw = 12*sum(vw)),
-    by = .(method, imp)
+    by = .(method, imp, firmset)
 ]
 
 # Convert to nicer table with imputation rows and fcast method cols
-table_ew <- dcast(ls_ports_mean, "imp ~ method", value.var = "ew")
-table_vw <- dcast(ls_ports_mean, "imp ~ method", value.var = "vw")
+table_ew <- dcast(ls_ports_mean, "imp + firmset ~ method", value.var = "ew")
+table_vw <- dcast(ls_ports_mean, "imp + firmset ~ method", value.var = "vw")
 
 #===============================================================================
 # Output

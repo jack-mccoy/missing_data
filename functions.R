@@ -379,3 +379,26 @@ unpackSignalList <- function(signal_list) {
     }
     return(impute_vec)
 }
+
+filterFirms <- function(DT, firmset, FILEPATHS) {
+    breakpoints <- fread(paste0(FILEPATHS$data_path, 
+        'raw/ME_Breakpoints_20_50_clean.csv'))
+    breakpoints[, ":="(
+        yyyymm = as.yearmon(yyyymm),
+        p20 = p20 * 1e3, # KF file is in millions and CRSP is in thousands
+        p50 = p50 * 1e3
+    )]
+    # Filter based on Fama and French (2008) cutoffs
+    if (firmset == "micro") {
+        out <- merge(DT, breakpoints, by = "yyyymm")[me < p20]
+    } else if (firmset == "small") {
+        out <- merge(DT, breakpoints, by = "yyyymm")[p20 <= me & me < p50]
+    } else if (firmset == "big") {
+        out <- merge(DT, breakpoints, by = "yyyymm")[p50 <= me]
+    } else {
+        stop("Did not specify `firmset` in one of (micro,small,big)\n")
+    }
+    return(out[, !c("p20", "p50")])
+}
+
+
