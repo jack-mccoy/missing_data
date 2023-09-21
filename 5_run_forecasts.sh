@@ -1,17 +1,16 @@
 #/bin/bash
 
 # Array of model names
-#mods=("keras1" "keras2" "keras3" "keras4" "keras5" "lightgbm" "lm" "pcr" "spcr") 
-mods=("lm")
+mods=("keras1" "keras2" "keras3" "keras4" "keras5" "lightgbm" "lm" "pcr" "spcr") 
 # Array of imputation types
-imps=("none" "em" "emar1" "ppca6" "ppca10" "ppca55" "ind" "indsize" "lastval")
-firmsets=("micro" "small" "big")
+imps=("none" "em" "emar1" "bllp6" "ppca6" "ppca10" "ppca40" "ppca55" "ind" "indsize" "lastval")
+firmsets=("micro" "small" "big" "all")
 
+# Start and end dates
 yearm_begin="1995-06"
 yearm_end="2020-06"
 
 # Paths
-#bcroot="/scratch/jpm2223/bcsignals/"
 output_folder="auto"
 
 # Loop through each model
