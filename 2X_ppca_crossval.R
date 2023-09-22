@@ -99,9 +99,9 @@ signals <- merge(
 signals[
     me_breaks,
     group := dplyr::case_when(
-        me/1000 > p50 ~ "big",
-        p20 < me/1000 & me/1000 < p50 ~ "small",
-        TRUE ~ "micro"
+        me/1000 > p50 ~ "Big",
+        p20 < me/1000 & me/1000 < p50 ~ "Small",
+        TRUE ~ "Micro"
     ),
     on = .(yyyymm)
 ]
@@ -207,6 +207,8 @@ rmsedat <- errsum[,
         nobs = sum(nobs, na.rm = TRUE)
     ),
     by = .(numPCs, group)
+][, # Better for plot
+    group := factor(group, levels = c("Micro", "Small", "Big")) 
 ]
 
 #===============================================================================
@@ -214,20 +216,37 @@ rmsedat <- errsum[,
 #===============================================================================
 
 # plot error by group
-cval_plot <- rmsedat %>%
-    ggplot(aes(x = numPCs, y = mean, group = group)) +
-    geom_line(aes(color = group, linetype = group)) +
+cval_plot <- ggplot(rmsedat, aes(x = numPCs, y = mean, group = group)) +
+    geom_line(aes(color = group, linetype = group), size = 0.5) +
     geom_point(aes(color = group, shape = group)) +
     geom_errorbar(aes(ymin = mean - 2*SE, ymax = mean + 2*SE, color = group)) +
+    theme_bw() +
+    theme(
+        legend.position = c(77, 75) / 100,
+        legend.background = element_blank(),
+        legend.key = element_blank(),
+        legend.spacing.y = unit(0.005, 'cm'),
+        legend.spacing.x = unit(0.1, 'cm'),
+        legend.box = 'horizontal',
+        legend.key.width = unit(0.55, 'cm'),
+        legend.key.height = unit(0.38, 'cm'),
+        legend.text = element_text(size = 7),
+        legend.title = element_text(size = 8)
+    ) + 
     labs(
-        title = paste0(
-            "ppca oos error ",
-            as.yearmon(opt$yearm_select),
-            " num_folds = ",
-            opt$num_folds
-        ),
+        colour = "Size Group",
+        shape = "Size Group",
+        linetype = "Size Group",
+        #title = paste0(
+        #    "ppca oos error ",
+        #    as.yearmon(opt$yearm_select),
+        #    " num_folds = ",
+        #    opt$num_folds
+        #),
+        x = "Number of PCs",
+        y = "RMSE",
         caption = paste0('error bars are 2 SE')
-    ) 
+    )
 
 dir.create(paste0(FILEPATHS$out_path, "plots/"))
 
@@ -242,7 +261,10 @@ ggsave(
         "_", opt$num_folds, "folds",
         ".pdf"
     ),
-    scale = 0.5
+    width = 8, 
+    height = 7,
+    unit = "in",
+    scale = 0.55
 )
 
 # size counts for reference

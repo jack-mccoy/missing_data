@@ -401,4 +401,35 @@ filterFirms <- function(DT, firmset, FILEPATHS) {
     return(out[, !c("p20", "p50")])
 }
 
+#==============================================================================
+# Large file unzip
+#==============================================================================
+decompress_file <- function(directory, file, .file_cache = FALSE) {
+
+    if (.file_cache == TRUE) {
+        print("decompression skipped")
+    } else {
+
+        # Set working directory for decompression
+        # simplifies unzip directory location behavior
+        wd <- getwd()
+        setwd(directory)
+
+        # Run decompression
+        decompression <- system2("unzip",
+            args = c("-o", file), # include override flag
+            stdout = TRUE)
+
+        file.remove(file)
+
+        # Reset working directory
+        setwd(wd); rm(wd)
+
+        # Test for success criteria
+        if (grepl("Warning message", tail(decompression, 1))) {
+            print(decompression)
+        }
+    }
+}
+
 

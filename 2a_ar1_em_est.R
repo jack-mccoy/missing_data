@@ -234,6 +234,8 @@ if (opt$winsor_p > 0){
 # EM on Residuals ----
 #==============================================================================#
 
+# Output directory for final EM correlations
+dir.create(paste0(FILEPATHS$out_path, "em_corrs/", opt$em_type), showWarnings = FALSE)
 
 # Timing for the log
 start_i <- Sys.time()
@@ -248,101 +250,106 @@ bcsignals_emar1 <- foreach::"%dopar%"(foreach::foreach(
   , .combine = rbind
 ), {
   
-  cat("Starting imputations for", as.character(i), "\n")
-  
-  # turn bclong2 into cross-sections
-  xs = list()
-  
-  xs$resid = bclong2[yyyymm == i] %>% select(permno,yyyymm,signalname,resid) %>% 
-    pivot_wider(names_from = signalname, values_from = resid) %>% 
-    arrange(permno) %>% 
-    setDT()
-  
-  xs$pred = bclong2[yyyymm == i] %>% select(permno,yyyymm,signalname,pred) %>% 
-    pivot_wider(names_from = signalname, values_from = pred) %>% 
-    arrange(permno) %>%   
-    setDT()
-  
-  xs$obs = bclong2[yyyymm == i] %>% select(permno,yyyymm,signalname,value) %>% 
-    pivot_wider(names_from = signalname, values_from = value) %>% 
-    arrange(permno) %>%   
-    setDT()
-
-  # Data prep --
-  
-  # sort by missingness, arrange columns
-  na_sort <- do.call("order", as.data.frame(-is.na(xs$resid))) 
-  xs$resid = xs$resid[ na_sort,   ] %>% select(c(permno,yyyymm, impute_vec))
-  xs$pred = xs$pred[na_sort, ] %>% select(c(permno,yyyymm, impute_vec))
-  xs$obs = xs$obs[na_sort, ] %>% select(c(permno,yyyymm, impute_vec))  
-  
-  # make matrices (note they're sorted above)
-  mat_resid <- xs$resid %>% select(-c(permno,yyyymm)) %>% as.matrix
-  mat_pred  <- xs$pred %>% select(-c(permno,yyyymm)) %>% as.matrix
-  mat_obs  <- xs$obs %>% select(-c(permno,yyyymm)) %>% as.matrix
-  
-  # Initialize mean and cov matrix
-  #   force means to be zero, since we have demeaned
-  #   enforce 0s on diagonal, as in the norm2 package
-  E0 = 0*colMeans(mat_resid, na.rm = T)
-  R0 = diag(diag(cov(mat_resid, use = "pairwise.complete.obs"))) 
-  
-  # Error checking. Catch missing means and covariance
-  if (any(is.na(E0))) stop(paste0('A signal has zero obs this month ', i))
-  if (any(is.na(R0))) stop(paste0('A signal has < 2 obs this month ', i))
-  
-  # EM impute residuals ---
-  em_out <- mvn_emf(mat_resid, E0, R0, maxiter = opt$maxiter, tol = opt$tol,
-                    update_estE = FALSE)
-  
-  # output log file if no convergence
-  if (em_out$maxiter >= opt$maxiter){
-    sink('3b_ar1_em_est.err')
-    Sys.time()
-    print('ar1_em_est.R error: divergence')
-    i
-    impute_vec
-    print('iter, tolerance')
-    em_out$maxiter
-    em_out$tol
-    print('E0')
-    E0
+    cat("Starting imputations for", as.character(i), "\n")
     
-    sink()
-  }
-  
-  # Ensure that imputation converged
-  if (em_out$maxiter >= opt$maxiter & opt$force_convergence) {
-    while (em_out$maxiter >= opt$maxiter) {
-      cat("Imputations for", i, "did not converge. Trying again...\n")
-      em_out <- mvn_emf(mat_resid, 
-                        em_out$estE, em_out$estR, 
-                        maxiter = opt$maxiter, 
-                        tol = opt$tol,
-                        update_estE = FALSE)
-    }
-  }
-  
-  # Combine EM residuals with predictions
-  mat_imp = mat_pred + em_out$Ey
-  
-  # replace with observed if observed
-  mat_obs_zeros = mat_obs
-  mat_obs_zeros[which(is.na(mat_obs_zeros))] = 0
-  mat_imp = as.numeric(is.na(mat_obs)) * mat_imp + as.numeric(!is.na(mat_obs)) * mat_obs_zeros
-  
-  
-  # add labels, make back into data table
-  imp = data.table(
-    permno = xs$resid$permno,
-    yyyymm = xs$resid$yyyymm,
-    mat_imp
-  )
-  
+    # turn bclong2 into cross-sections
+    xs = list()
+    
+    xs$resid = bclong2[yyyymm == i] %>% select(permno,yyyymm,signalname,resid) %>% 
+        pivot_wider(names_from = signalname, values_from = resid) %>% 
+        arrange(permno) %>% 
+        setDT()
+    
+    xs$pred = bclong2[yyyymm == i] %>% select(permno,yyyymm,signalname,pred) %>% 
+        pivot_wider(names_from = signalname, values_from = pred) %>% 
+        arrange(permno) %>%   
+        setDT()
+    
+    xs$obs = bclong2[yyyymm == i] %>% select(permno,yyyymm,signalname,value) %>% 
+        pivot_wider(names_from = signalname, values_from = value) %>% 
+        arrange(permno) %>%   
+        setDT()
 
-  cat("Finished imputations for",  as.character(i), "\n")
+    # Data prep ----
+    
+    # sort by missingness, arrange columns
+    na_sort <- do.call("order", as.data.frame(-is.na(xs$resid))) 
+    xs$resid = xs$resid[ na_sort,   ] %>% select(c(permno,yyyymm, impute_vec))
+    xs$pred = xs$pred[na_sort, ] %>% select(c(permno,yyyymm, impute_vec))
+    xs$obs = xs$obs[na_sort, ] %>% select(c(permno,yyyymm, impute_vec))  
+    
+    # make matrices (note they're sorted above)
+    mat_resid <- xs$resid %>% select(-c(permno,yyyymm)) %>% as.matrix
+    mat_pred <- xs$pred %>% select(-c(permno,yyyymm)) %>% as.matrix
+    mat_obs <- xs$obs %>% select(-c(permno,yyyymm)) %>% as.matrix
+    
+    # Initialize mean and cov matrix
+    #   force means to be zero, since we have demeaned
+    #   enforce 0s on diagonal, as in the norm2 package
+    E0 = 0*colMeans(mat_resid, na.rm = T)
+    R0 = diag(diag(cov(mat_resid, use = "pairwise.complete.obs"))) 
+    
+    # Error checking. Catch missing means and covariance
+    if (any(is.na(E0))) stop(paste0('A signal has zero obs this month ', i))
+    if (any(is.na(R0))) stop(paste0('A signal has < 2 obs this month ', i))
+    
+    # EM impute residuals ---
+    em_out <- mvn_emf(mat_resid, E0, R0, maxiter = opt$maxiter, tol = opt$tol,
+        update_estE = FALSE)
+    
+    # output log file if no convergence
+    if (em_out$maxiter >= opt$maxiter){
+        sink('3b_ar1_em_est.err')
+        Sys.time()
+        print('ar1_em_est.R error: divergence')
+        i
+        impute_vec
+        print('iter, tolerance')
+        em_out$maxiter
+        em_out$tol
+        print('E0')
+        E0
+        
+        sink()
+    }
+    
+    # Ensure that imputation converged
+    if (em_out$maxiter >= opt$maxiter & opt$force_convergence) {
+      while (em_out$maxiter >= opt$maxiter) {
+        cat("Imputations for", i, "did not converge. Trying again...\n")
+        em_out <- mvn_emf(mat_resid, 
+            em_out$estE, em_out$estR, 
+            maxiter = opt$maxiter, 
+            tol = opt$tol,
+            update_estE = FALSE)
+      }
+    }
+    
+    # Combine EM residuals with predictions
+    mat_imp = mat_pred + em_out$Ey
+    
+    # replace with observed if observed
+    mat_obs_zeros = mat_obs
+    mat_obs_zeros[which(is.na(mat_obs_zeros))] = 0
+    mat_imp = as.numeric(is.na(mat_obs)) * mat_imp + as.numeric(!is.na(mat_obs)) * mat_obs_zeros
   
-  return(imp)
+    # Output correlation CSV used in some of the plots later
+    # Use only lower tri to save ourselves a bit of storage
+    dimnames(em_out$estR) <- list(colnames(mat_imp), colnames(mat_imp))
+    em_out$estR[upper.tri(em_out$estR)] <- NA
+    write.csv(em_out$estR,
+        paste0(FILEPATHS$out_path, "em_corrs/", opt$em_type, "/estR_", gsub(" ", "", i), ".csv"))
+  
+    # add labels, make back into data table
+    imp = data.table(
+        permno = xs$resid$permno,
+        yyyymm = xs$resid$yyyymm,
+        mat_imp
+    )
+
+    cat("Finished imputations for",  as.character(i), "\n")
+    
+    return(imp)
   
 })
 
@@ -351,7 +358,6 @@ bcsignals_emar1 <- foreach::"%dopar%"(foreach::foreach(
 end_i <- Sys.time()
 imp_time <- difftime(end_i, start_i, units = "mins")
 cat("Imputations for", opt$impute_yr, "ran in", imp_time, "minutes")
-
 
 #==============================================================================#
 # Save ----

@@ -43,9 +43,8 @@ size_path <- "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/ME_Bre
 
 # Download and unzip
 download.file(size_path, paste0(FILEPATHS$data_path, 'raw/deleteme.zip'))
-unzip(paste0(FILEPATHS$data_path, 'raw/deleteme.zip'), 
-    exdir = paste0(FILEPATHS$data_path, 'raw/'))
-file.remove(paste0(FILEPATHS$data_path, 'raw/deleteme.zip'))
+decompress_file(directory = paste0(FILEPATHS$data_path, "raw/"),
+    file = "deleteme.zip")
 
 # Read in data and clean ====
 
@@ -184,9 +183,8 @@ dl <- drive_download(target_dribble,
     overwrite = TRUE)
 
 # unzip, clean up
-unzip(paste0(FILEPATHS$data_path, 'raw/deleteme.zip'), 
-    exdir = paste0(FILEPATHS$data_path, 'raw/'))
-file.remove(paste0(FILEPATHS$data_path, 'raw/deleteme.zip'))
+decompress_file(directory = paste0(FILEPATHS$data_path, "raw/"),
+    file = "deleteme.zip")
 
 # download ports ====
 # this is just for counting and making signal lists

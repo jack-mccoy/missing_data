@@ -5,8 +5,8 @@ user_email="$USER@gsb.columbia.edu"
 #signals_list="../data/signals_best125_1985.txt"
 
 if [ $1 = "em" ]; then
-    #--grid_SGE_TASK_ID=1985-2020 \
     Rscript --grid_submit=batch \
+        --grid_SGE_TASK_ID=1985-2020 \
         --grid_mem=100G \
         --grid_ncpus=12 \
         --grid_email=$user_email \
@@ -14,8 +14,7 @@ if [ $1 = "em" ]; then
             --em_type="$2" \
             --maxiter=100000 \
             --ar1_sample_length=5 \
-            --tol=1e-4 \
-            --impute_yr=2020
+            --tol=1e-4
             #-f
 fi
 

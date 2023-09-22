@@ -66,7 +66,7 @@ signals <- fread(paste0(FILEPATHS$data_path, "bcsignals/bcsignals_none.csv"))
 signals[, yyyymm := as.yearmon(yyyymm)]
 
 # Read in the other data from CRSP 
-crsp_data <- fread(FILEPATHS$data_path, "raw/crsp_data.csv")[, 
+crsp_data <- fread(paste0(FILEPATHS$data_path, "raw/crsp_data.csv"))[, 
     .(permno, yyyymm, hsiccd, me)
 ]
 crsp_data[, ":="(
