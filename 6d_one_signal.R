@@ -1,38 +1,56 @@
 # one signal strategies.  Created 2022 06 Andrew
 
-# Environment ----
+#===============================================================================
+# Packages and functions
+#===============================================================================
+
 rm(list = ls())
 library(data.table)
 library(tidyverse)
 library(ggplot2)
 
-datebegin = 1985
-dateend   = 2020
+source("functions.R")
+
+#===============================================================================
+# Hardcodes
+#===============================================================================
+
+datebegin <- 1985
+dateend <- 2020
 
 # fix number of stocks in each leg to "control" for "signal loading" of mvn vs simple strats
-nstock_per_leg = 500 
+nstock_per_leg <- 500 
 
-# read in data ----
+# Project file paths
+getFilePaths()
+
+#===============================================================================
+# Read in data
+#===============================================================================
 
 ## read ----
 # round yyyymm to make sure they match (needed because the write precision differs?)
 
 # lead returns by 1 month
-ret_dat <- fread("../data/crsp_data.csv") %>% select(permno,yyyymm,ret) %>% 
-  mutate(yyyymm = round(yyyymm-1/12, 3)) %>% 
-  rename(bh1m = ret) 
+ret_dat <- fread(paste0(FILEPATHS$data_path, "raw/crsp_data.csv")) %>% 
+    select(permno,yyyymm,ret) %>% 
+    mutate(yyyymm = round(yyyymm-1/12, 3)) %>% 
+    rename(bh1m = ret) 
 
-me_dat = fread("../data/crsp_data.csv") %>% select(permno,yyyymm,me) %>% 
-  mutate(yyyymm = round(yyyymm, 3)) 
+me_dat = fread(paste0(FILEPATHS$data_path, "raw/crsp_data.csv")) %>% 
+    select(permno,yyyymm,me) %>% 
+    mutate(yyyymm = round(yyyymm, 3)) 
 
 # signals 
-signals_mvn = fread('../output/bcsignals/bcsignals_em.csv') %>% 
-  mutate(yyyymm = round(yyyymm, 3)) 
+signals_mvn = fread(paste0(FILEPATHS$data_path, 'bcsignals/bcsignals_em.csv')) %>% 
+    mutate(yyyymm = round(yyyymm, 3)) 
 
-signals_simple = fread('../output/bcsignals/bcsignals_none.csv') %>% 
-  mutate(yyyymm = round(yyyymm, 3))
+signals_simple = fread(paste0(FILEPATHS$data_path, 'bcsignals/bcsignals_none.csv')) %>% 
+    mutate(yyyymm = round(yyyymm, 3))
 
-## auto setup ----
+#===============================================================================
+# auto setup ----
+#===============================================================================
 
 # create a list of signals
 signallist = signals_simple %>% select(-c(permno,yyyymm)) %>% colnames() %>% sort()
@@ -50,8 +68,11 @@ reg_dat0 = ret_dat %>%
     !is.na(bh1m), !is.na(me)
   )
 
-# Loop over imp_type, signals  ---- 
+#===============================================================================
+# Loop over imp_type, signals 
 # takes about 2 minutes
+#===============================================================================
+
 dat_all = data.table()
 
 for (imp_type in c('simple','mvn')){
@@ -118,9 +139,9 @@ for (imp_type in c('simple','mvn')){
   
 } # for imp_type
 
-
-
+#===============================================================================
 # Summarize by imp_type, signal----
+#===============================================================================
 
 ret_var = 'bh1m_ew'
 
@@ -134,7 +155,6 @@ bad_signal_dates = dat_all %>%
     bad = if_else(long == 500 & short == 500, 0 , 1)
   ) %>% 
   select(yyyymm,signalname,bad)
-
 
 
 # reorganize data
@@ -217,6 +237,10 @@ imp_sum2 = imp_sum %>%
 
 imp_sum2
 
-write.csv(imp_sum2, file = '../output/plots/one_signal.csv' )
+#===============================================================================
+# Output table
+#===============================================================================
 
+dir.create(paste0(FILEPATHS$out_path, 'tables/'), showWarnings=FALSE)
+write.csv(imp_sum2, file = paste0(FILEPATHS$out_path, 'tables/one_signal.csv'))
 

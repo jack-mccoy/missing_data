@@ -72,7 +72,7 @@ cor_imp <- rbindlist(lapply(dateliststr, function(datecurr) {
     temp <- as.matrix(read.csv(fname, row.names = 1))
     temp[upper.tri(temp)] <- t(temp)[upper.tri(t(temp))]
     temp <- as.data.table(cov2cor(temp))[, yyyymm := as.yearmon(datecurr)]
-    cor_imp <- rbind(cor_imp, temp)
+    return(temp)
 
 })) 
 
@@ -131,8 +131,8 @@ edge = seq(-1,1,0.05)
 histdat = clist_dat %>% 
     group_by(imp_type, date) %>% 
     summarize(
-        mids = hist(cor, edge)$mids,
-        density = hist(cor, edge)$density
+        mids = hist(cor, edge, plot = FALSE)$mids,
+        density = hist(cor, edge, plot = FALSE)$density
     ) %>% 
     mutate(
         imp_type = factor(
@@ -177,7 +177,7 @@ for (date_curr in datelist){
             keyheight=1.2,
             default.unit="cm")
         )
-    
+
     ggsave(
         plot = p,
         filename = paste0(
@@ -231,7 +231,7 @@ for (date_curr in datelist){
 
 edge <- seq(-1,1,0.05/10)
 
-for (date_curr in datelist){
+for (date_curr in datelist) {
 
     cimp <- cor_dat %>%
         filter(yyyymm == date_curr, imp_type == 'mvn') %>%
@@ -249,8 +249,8 @@ for (date_curr in datelist){
     
     plotme = dclist %>% 
         summarize(
-          mids = hist(dc, edge)$mids,
-          density = hist(dc, edge)$density
+          mids = hist(dc, edge, plot = FALSE)$mids,
+          density = hist(dc, edge, plot = FALSE)$density
         )
     
     p_dc = ggplot(plotme, aes(x=mids, y=density)) +
@@ -291,8 +291,8 @@ for (date_curr in datelist){
     plotme <- tibble(dpct = dpct[lower.tri(dpct)])  %>% 
         filter(dpct >= min(edge), dpct <= max(edge)) %>% 
         summarize(
-            mids = hist(dpct, edge)$mids,
-            density = hist(dpct, edge)$density
+            mids = hist(dpct, edge, plot = FALSE)$mids,
+            density = hist(dpct, edge, plot = FALSE)$density
         )
     
     p_dpct <- ggplot(plotme, aes(x=mids, y=density)) +

@@ -3,7 +3,7 @@
 # Array of model names
 mods=("keras1" "keras2" "keras3" "keras4" "keras5" "lightgbm" "lm" "pcr" "spcr") 
 # Array of imputation types
-imps=("none" "em" "emar1" "bllp6" "ppca6" "ppca10" "ppca40" "ppca55" "ind" "indsize" "lastval")
+imps=("none" "em" "emar1" "bllp6" "ppca10" "ppca40" "indsize" "lastval")
 firmsets=("micro" "small" "big" "all")
 
 # Start and end dates
