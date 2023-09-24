@@ -29,19 +29,36 @@ fcast_data <- rbindlist(lapply(fcasts, function(f) {
     method <- stringr::str_split(f, "-")[[1]][1]
     imp <- regmatches(f, regexpr("_", f), invert = TRUE)[[1]][2]
     firmset <- stringr::str_split(f, "-")[[1]][3]
-    dt <- fread(file)[, ":="(
-        method = method,
-        imp = ifelse(!is.na(firmset), gsub(paste0("-", firmset), "", imp), imp),
-        firmset = dplyr::case_when(
-            is.na(firmset) ~ "all",
-            firmset %in% c("micro", "small", "big") ~ "separate",
-            TRUE ~ firmset
-        )
-    )]
+    dt <- tryCatch(
+        fread(file)[, ":="(
+            method = method,
+            imp = ifelse(!is.na(firmset), gsub(paste0("-", firmset), "", imp), imp),
+            firmset = firmset
+        )],
+        error = function(e) {
+            warning("No dataset for", f)
+            return(NULL)
+        }
+    )
     return(dt)
 }))
 
-# Merge and make dates nice 
+# Filter to make sure that we have all the necessary groups for separate
+fcast_data[ # Count number of groups for separately estimated forecasts
+    firmset != "all", 
+    n_groups := length(unique(firmset)),
+    by = .(yyyymm, method, imp)
+]
+fcast_data <- fcast_data[ # separately estd forecasts should have 3 groups each
+    (n_groups == 3 & firmset != "all") | 
+    (is.na(n_groups) & firmset == "all")
+][, # Now group all the "separate" estimates together for when forming portfolios
+    firmset := dplyr::case_when(
+        firmset %in% c("micro", "small", "big") ~ "separate",
+        TRUE ~ "all"
+    )
+]
+
 fcast_data <- merge(fcast_data, crsp_data, by = c("permno", "yyyymm"))
 
 #===============================================================================

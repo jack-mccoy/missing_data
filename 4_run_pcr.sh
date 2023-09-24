@@ -19,7 +19,7 @@ sample_start_yr=$(($start_yr-$n_years))
 # These take up so much memory that I need to do one year at a time
 # But they each run relatively quickly
 for _yr in $(eval echo "{$start_yr..$end_yr}"); do
-    for imp in "none" "em" "bllp6" "ppca10"; do
+    for imp in "none" "em" "bllp6"; do
         for forecast in "pca" "spca1" "spca2"; do 
             
             if [ $forecast = "pca" ]; then
