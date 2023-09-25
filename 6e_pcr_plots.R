@@ -27,8 +27,8 @@ plot_path <- paste0(FILEPATHS$out_path, 'plots/')
 dir.create(plot_path, showWarnings = FALSE)
 
 imp_names <- setNames(
-    c("EM Algo","Simple Mean","BLLP loc B-XS", "pPCA-10"),
-    c("em","none","bllp6", "ppca10")
+    c("EM Algo","Simple Mean","BLLP loc B-XS"),
+    c("em","none","bllp6")
 )
 
 #===============================================================================#
@@ -131,13 +131,11 @@ for (cur_fore in fore_list) {
     if (cur_fore == "pca") {
         pos <- c(25,85)/100
     } else {
-        pos <- c(70, 63)/100
+        pos <- c(70, 59)/100
     }
-  
-  # All the line plots will have same basic look
-    plot_base <- ggplot(sum_data[forecast == cur_fore], 
-            aes(x = pc, colour = weighting, linetype = imp)) + 
-        theme_bw() + 
+
+    # Elements common to all plots
+    common_theme <- theme_bw() + 
         theme(
             legend.position = pos,
             legend.background = element_blank(),
@@ -149,53 +147,105 @@ for (cur_fore in fore_list) {
             legend.key.height = unit(0.38, 'cm'),
             legend.text = element_text(size = 7),
             legend.title = element_text(size = 8)
+        )
+  
+    # All the line plots will have same basic look
+    plot_base_main <- ggplot(
+            sum_data[forecast == cur_fore & imp != "BLLP loc B-XS"], 
+            aes(x = pc, colour = weighting, linetype = imp)
         ) + 
-        labs(
-          colour = "Stock Weights",
-          linetype = "Imputation",
-          x = "Number of PCs"
-        ) +
+        common_theme  +
         guides(
           colour = guide_legend(order = 1),
           linetype = guide_legend(order = 2)
         ) +
-        scale_linetype_manual(values = c('solid', 'longdash', 'dotted', 'dotdash')) +
-        scale_size_manual(values = c(0.8, 0.8, 0.5, 0.5)) +
-        scale_color_manual(values = c(MATRED, MATBLUE))
+        scale_linetype_manual(values = c('solid', 'longdash', 'dotted')) +
+        scale_size_manual(values = c(0.8, 0.8, 0.5)) +
+        scale_color_manual(values = c(MATRED, MATBLUE)) + 
+        labs(
+          colour = "Stock Weights",
+          linetype = "Imputation",
+          x = "Number of PCs"
+        )
+    plot_base_appendix <- ggplot(sum_data[forecast == cur_fore], 
+            aes(x = pc, colour = weighting, linetype = imp)) + 
+        common_theme  +
+        guides(
+          colour = guide_legend(order = 1),
+          linetype = guide_legend(order = 2)
+        ) +
+        scale_linetype_manual(values = c('solid', 'longdash', 'dotted')) +
+        scale_size_manual(values = c(0.8, 0.8, 0.5)) +
+        scale_color_manual(values = c(MATRED, MATBLUE)) + 
+        labs(
+          colour = "Stock Weights",
+          linetype = "Imputation",
+          x = "Number of PCs"
+        )
+
+    # Main figure plots ====
   
-    # Specific plots
-    mn <- plot_base + geom_line(aes(y = rbar)) + 
-        scale_y_continuous(breaks = seq(10, 40, 10), limits=c(0,45)) +
+    mn_main <- plot_base_main + geom_line(aes(y = rbar)) + 
+        scale_y_continuous(breaks = seq(10, 50, 10), limits=c(0,55)) +
         ylab("Annualized Mean Return (%)")
-    stdev <- plot_base + geom_line(aes(y = vol)) +
+    stdev_main <- plot_base_main + geom_line(aes(y = vol)) +
         ylab("Annualized Std. Dev. (%)") 
-    sharpe <- plot_base + geom_line(aes(y = sharpe)) + 
-        scale_y_continuous(breaks = seq(0.5, 2.5, 0.5), limits=c(0,2.75)) +
+    sharpe_main <- plot_base_main + geom_line(aes(y = sharpe)) + 
+        scale_y_continuous(breaks = seq(0.5, 3, 0.5), limits=c(0,3.25)) +
         ylab("Annualized Sharpe Ratio") 
-    alpha_capm <- plot_base + geom_line(aes(y = alpha_capm)) +
+    alpha_capm_main <- plot_base_main + geom_line(aes(y = alpha_capm)) +
         ylab('Annualized CAPM Alpha (%)')
-    alpha_ff5 <- plot_base + geom_line(aes(y = alpha_ff5)) +
+    alpha_ff5_main <- plot_base_main + geom_line(aes(y = alpha_ff5)) +
         ylab('Annualized FF5 + Mom Alpha (%)')
   
-    ggsave(plot = mn,
-        filename = paste0(plot_path, cur_fore, "_expected_rets.pdf"),
+    ggsave(plot = mn_main,
+        filename = paste0(plot_path, cur_fore, "_expected_rets_main.pdf"),
         width = 8, height = 5, unit = "in", scale = scale_gg)
   
-    ggsave(plot = sharpe, 
-        filename = paste0(plot_path, cur_fore, "_sharpes.pdf"),
+    ggsave(plot = sharpe_main, 
+        filename = paste0(plot_path, cur_fore, "_sharpes_main.pdf"),
         width = 8, height = 5, unit = "in", scale = scale_gg)
     
-    ggsave(plot = alpha_capm,
-        filename = paste0(plot_path, cur_fore, "_alpha_capm.pdf"),
+    ggsave(plot = alpha_capm_main,
+        filename = paste0(plot_path, cur_fore, "_alpha_capm_main.pdf"),
         width = 8, height = 5, unit = "in", scale = scale_gg)
     
-    ggsave(plot = alpha_ff5, 
-        filename = paste0(plot_path, cur_fore, "_alpha_ff5_mom.pdf"),
+    ggsave(plot = alpha_ff5_main, 
+        filename = paste0(plot_path, cur_fore, "_alpha_ff5_mom_main.pdf"),
+        width = 8, height = 5, unit = "in", scale = scale_gg)
+
+    # Appendix ====
+  
+    mn_appendix <- plot_base_appendix + geom_line(aes(y = rbar)) + 
+        scale_y_continuous(breaks = seq(10, 50, 10), limits=c(0,55)) +
+        ylab("Annualized Mean Return (%)")
+    stdev_appendix <- plot_base_appendix + geom_line(aes(y = vol)) +
+        ylab("Annualized Std. Dev. (%)") 
+    sharpe_appendix <- plot_base_appendix + geom_line(aes(y = sharpe)) + 
+        scale_y_continuous(breaks = seq(0.5, 3, 0.5), limits=c(0,3.25)) +
+        ylab("Annualized Sharpe Ratio") 
+    alpha_capm_appendix <- plot_base_appendix + geom_line(aes(y = alpha_capm)) +
+        ylab('Annualized CAPM Alpha (%)')
+    alpha_ff5_appendix <- plot_base_appendix + geom_line(aes(y = alpha_ff5)) +
+        ylab('Annualized FF5 + Mom Alpha (%)')
+  
+    ggsave(plot = mn_appendix,
+        filename = paste0(plot_path, cur_fore, "_expected_rets_appendix.pdf"),
+        width = 8, height = 5, unit = "in", scale = scale_gg)
+  
+    ggsave(plot = sharpe_appendix, 
+        filename = paste0(plot_path, cur_fore, "_sharpes_appendix.pdf"),
+        width = 8, height = 5, unit = "in", scale = scale_gg)
+    
+    ggsave(plot = alpha_capm_appendix,
+        filename = paste0(plot_path, cur_fore, "_alpha_capm_appendix.pdf"),
+        width = 8, height = 5, unit = "in", scale = scale_gg)
+    
+    ggsave(plot = alpha_ff5_appendix, 
+        filename = paste0(plot_path, cur_fore, "_alpha_ff5_mom_appendix.pdf"),
         width = 8, height = 5, unit = "in", scale = scale_gg)
     
 }
-
-stop()
 
 # Cumulative returns over time ----
 
