@@ -216,13 +216,13 @@ if (class(signals$yyyymm) != "yearmon") {
 
 # merge in (the merge is the filter because it's an inner join by default)
 cat("Before share code filter, there are", nrow(signals), "observations",
-    "in the signals data set")
+    "in the signals data set\n")
 
 signals_filt <- merge(signals, crsp_final[, .(permno, yyyymm)], 
     by = c("permno", "yyyymm")) 
 
 cat("After share code filter, there are", nrow(signals_filt), "observations",
-    "in the signals data set")
+    "in the signals data set\n")
 
 fwrite(signals_filt, 
     paste0(FILEPATHS$data_path, "raw/signed_predictors_dl_wide_filtered.csv"))
