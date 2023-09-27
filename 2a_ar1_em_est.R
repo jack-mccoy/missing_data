@@ -235,7 +235,9 @@ if (opt$winsor_p > 0){
 #==============================================================================#
 
 # Output directory for final EM correlations
-dir.create(paste0(FILEPATHS$out_path, "em_corrs/", opt$em_type), showWarnings = FALSE)
+dir.create(paste0(FILEPATHS$out_path, "em_corrs/"), showWarnings = FALSE)
+dir.create(paste0(FILEPATHS$out_path, "em_corrs/", opt$em_type),
+    showWarnings = FALSE)
 
 # Timing for the log
 start_i <- Sys.time()
@@ -297,32 +299,42 @@ bcsignals_emar1 <- foreach::"%dopar%"(foreach::foreach(
     em_out <- mvn_emf(mat_resid, E0, R0, maxiter = opt$maxiter, tol = opt$tol,
         update_estE = FALSE)
     
-    # output log file if no convergence
-    if (em_out$maxiter >= opt$maxiter){
-        sink('3b_ar1_em_est.err')
-        Sys.time()
-        print('ar1_em_est.R error: divergence')
-        i
-        impute_vec
-        print('iter, tolerance')
-        em_out$maxiter
-        em_out$tol
-        print('E0')
-        E0
-        
-        sink()
-    }
+    ## output log file if no convergence
+    #if (em_out$maxiter >= opt$maxiter){
+    #    sink('3b_ar1_em_est.err')
+    #    Sys.time()
+    #    print('ar1_em_est.R error: divergence')
+    #    i
+    #    impute_vec
+    #    print('iter, tolerance')
+    #    em_out$maxiter
+    #    em_out$tol
+    #    print('E0')
+    #    E0
+    #    
+    #    sink()
+    #}
     
     # Ensure that imputation converged
-    if (em_out$maxiter >= opt$maxiter & opt$force_convergence) {
-      while (em_out$maxiter >= opt$maxiter) {
-        cat("Imputations for", i, "did not converge. Trying again...\n")
-        em_out <- mvn_emf(mat_resid, 
-            em_out$estE, em_out$estR, 
-            maxiter = opt$maxiter, 
-            tol = opt$tol,
-            update_estE = FALSE)
-      }
+    if (em_out$maxiter >= opt$maxiter) {
+        if (opt$force_convergence) {
+            while (em_out$maxiter >= opt$maxiter) {
+              cat("Imputations for", i, "did not converge. Trying again...\n")
+              em_out <- mvn_emf(mat_resid, 
+                  em_out$estE, em_out$estR, 
+                  maxiter = opt$maxiter, 
+                  tol = opt$tol,
+                  update_estE = FALSE)
+            }
+        } else {
+            dir.create(paste0(FILEPATHS$out_path, "em_convergence/"))
+            sink(paste0(paste0(FILEPATHS$out_path, "em_convergence/maxiter_", gsub(" ", "", i), "_", opt$em_type)))
+            cat(Sys.time())
+            cat("No convergence for month\n")
+            cat("iter:", em_out$maxiter, "\n")
+            cat("specified tol:", em_out$tol, "\n")
+            sink()
+        }
     }
     
     # Combine EM residuals with predictions
