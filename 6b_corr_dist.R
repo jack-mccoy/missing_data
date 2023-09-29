@@ -99,6 +99,9 @@ for (keyi in 1:dim(keylist)[1]){
         filter(imp_type == imp_curr, yyyymm == date_curr) %>% 
         select(-c(imp_type,yyyymm)) %>% 
         as.matrix()
+
+    # For data that is not imputed, assume corr is zero if no overlapping obs
+    cmat[is.na(cmat)] <- 0
     
     clist = cmat[lower.tri(cmat)]
     
@@ -242,8 +245,9 @@ for (date_curr in datelist) {
         select(-c(yyyymm, imp_type)) %>%
         as.matrix()
     
-    dc <- cimp-cobs
-    dclist = tibble(dc = dc[lower.tri(dc)])
+    dc <- (cimp-cobs)
+    dclist = tibble(dc = dc[lower.tri(dc)]) %>%
+        filter(dc >= min(edge), dc <= max(edge)) # remove outliers (these are in .0001 pctiles or more) 
     
     dpct <- dc/abs(cobs)*100
     

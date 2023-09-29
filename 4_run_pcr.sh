@@ -8,7 +8,8 @@ start_yr=1995
 end_yr=2020
 
 # Parameters for principal component regressions
-n_pcs=75 # number of PCs in maximal regression
+n_pcs=121 # number of PCs in maximal regression
+skip_n=10 # skipper in sequence
 n_years=10 # number of years for principal components/predictive regs
 quantile_prob=0.1 # quantile to form long/short portfolios (0.1 means deciles)
 
@@ -20,7 +21,7 @@ sample_start_yr=$(($start_yr-$n_years))
 # But they each run relatively quickly
 for _yr in $(eval echo "{$start_yr..$end_yr}"); do
     for imp in "none" "em" "bllp6"; do
-        for forecast in "pca" "spca1" "spca2"; do 
+        for forecast in "pca" "spca1"; do 
             
             if [ $forecast = "pca" ]; then
                 scaled_pca="FALSE"
@@ -46,7 +47,8 @@ for _yr in $(eval echo "{$start_yr..$end_yr}"); do
                     --iter_year=$_yr \
                     --n_yrs=$n_years \
                     --quantile_prob=$quantile_prob \
-                    --n_pcs=$n_pcs
+                    --n_pcs=$n_pcs \
+                    --skip_n=$skip_n
         done
     done
 done

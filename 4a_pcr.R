@@ -54,6 +54,9 @@ option_list <- list(
     optparse::make_option(c("--n_pcs"),
         type = "numeric", default = 25,
         help = "maximum number of principal components to use in PCRs"),
+    optparse::make_option(c("--skip_n"),
+        type = "numeric", default = 1,
+        help = "number of PCs to skip. i.e. will have sequence seq(1, n_pcs, skip_n)"),
     optparse::make_option(c("--cores_frac"),
         type = "numeric", default = 1.0,
         help = "fraction of total cores to use")
@@ -191,7 +194,7 @@ ncores <- floor(parallel::detectCores()*opt$cores_frac)
 doParallel::registerDoParallel(cores = ncores)
 
 pcr_pred <- foreach::"%dopar%"(foreach::foreach(
-  j = seq(1,n_pcs,1), .packages = c('data.table','zoo')
+  j = seq(1,n_pcs,opt$skip_n), .packages = c('data.table','zoo')
 ), {
 
   # Need EW and VW regressions as separate models

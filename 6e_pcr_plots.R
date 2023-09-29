@@ -129,7 +129,7 @@ imp_list <- unique(sum_data$imp)
 for (cur_fore in fore_list) {
 
     if (cur_fore == "pca") {
-        pos <- c(25,85)/100
+        pos <- c(25,86)/100
     } else {
         pos <- c(70, 59)/100
     }
@@ -141,22 +141,23 @@ for (cur_fore in fore_list) {
             legend.background = element_blank(),
             legend.key = element_blank(),
             legend.spacing.y = unit(0.005, 'cm'),
-            legend.spacing.x = unit(0.1, 'cm'),
+            legend.spacing.x = unit(0.06, 'cm'),
             legend.box = 'horizontal',
             legend.key.width = unit(0.55, 'cm'),
             legend.key.height = unit(0.38, 'cm'),
-            legend.text = element_text(size = 7),
-            legend.title = element_text(size = 8)
+            legend.text = element_text(size = 6),
+            legend.title = element_text(size = 7)
         )
   
     # All the line plots will have same basic look
     plot_base_main <- ggplot(
             sum_data[forecast == cur_fore & imp != "BLLP loc B-XS"], 
-            aes(x = pc, colour = weighting, linetype = imp)
+            aes(x = pc, colour = weighting, shape = weighting, linetype = imp)
         ) + 
         common_theme  +
         guides(
           colour = guide_legend(order = 1),
+          shape = guide_legend(order = 1),
           linetype = guide_legend(order = 2)
         ) +
         scale_linetype_manual(values = c('solid', 'longdash', 'dotted')) +
@@ -165,13 +166,17 @@ for (cur_fore in fore_list) {
         labs(
           colour = "Stock Weights",
           linetype = "Imputation",
+          shape = "Stock Weights",
           x = "Number of PCs"
         )
-    plot_base_appendix <- ggplot(sum_data[forecast == cur_fore], 
-            aes(x = pc, colour = weighting, linetype = imp)) + 
+    plot_base_appendix <- ggplot(
+            sum_data[forecast == cur_fore], 
+            aes(x = pc, colour = weighting, shape = weighting, linetype = imp)
+        ) + 
         common_theme  +
         guides(
           colour = guide_legend(order = 1),
+          shape = guide_legend(order = 1),
           linetype = guide_legend(order = 2)
         ) +
         scale_linetype_manual(values = c('solid', 'longdash', 'dotted')) +
@@ -180,22 +185,29 @@ for (cur_fore in fore_list) {
         labs(
           colour = "Stock Weights",
           linetype = "Imputation",
+          shape = "Stock Weights",
           x = "Number of PCs"
         )
 
     # Main figure plots ====
   
-    mn_main <- plot_base_main + geom_line(aes(y = rbar)) + 
+    mn_main <- plot_base_main + 
+        geom_line(aes(y = rbar)) + 
+        geom_point(aes(y = rbar)) + 
         scale_y_continuous(breaks = seq(10, 50, 10), limits=c(0,55)) +
         ylab("Annualized Mean Return (%)")
     stdev_main <- plot_base_main + geom_line(aes(y = vol)) +
+        geom_point(aes(y = vol)) + 
         ylab("Annualized Std. Dev. (%)") 
     sharpe_main <- plot_base_main + geom_line(aes(y = sharpe)) + 
+        geom_point(aes(y = sharpe)) + 
         scale_y_continuous(breaks = seq(0.5, 3, 0.5), limits=c(0,3.25)) +
         ylab("Annualized Sharpe Ratio") 
     alpha_capm_main <- plot_base_main + geom_line(aes(y = alpha_capm)) +
+        geom_point(aes(y = alpha_capm)) + 
         ylab('Annualized CAPM Alpha (%)')
     alpha_ff5_main <- plot_base_main + geom_line(aes(y = alpha_ff5)) +
+        geom_point(aes(y = alpha_ff5)) + 
         ylab('Annualized FF5 + Mom Alpha (%)')
   
     ggsave(plot = mn_main,
@@ -217,16 +229,21 @@ for (cur_fore in fore_list) {
     # Appendix ====
   
     mn_appendix <- plot_base_appendix + geom_line(aes(y = rbar)) + 
+        geom_point(aes(y = rbar)) +
         scale_y_continuous(breaks = seq(10, 50, 10), limits=c(0,55)) +
         ylab("Annualized Mean Return (%)")
     stdev_appendix <- plot_base_appendix + geom_line(aes(y = vol)) +
+        geom_point(aes(y = vol)) +
         ylab("Annualized Std. Dev. (%)") 
     sharpe_appendix <- plot_base_appendix + geom_line(aes(y = sharpe)) + 
+        geom_point(aes(y = sharpe)) +
         scale_y_continuous(breaks = seq(0.5, 3, 0.5), limits=c(0,3.25)) +
         ylab("Annualized Sharpe Ratio") 
     alpha_capm_appendix <- plot_base_appendix + geom_line(aes(y = alpha_capm)) +
+        geom_point(aes(y = alpha_capm)) +
         ylab('Annualized CAPM Alpha (%)')
     alpha_ff5_appendix <- plot_base_appendix + geom_line(aes(y = alpha_ff5)) +
+        geom_point(aes(y = alpha_ff5)) +
         ylab('Annualized FF5 + Mom Alpha (%)')
   
     ggsave(plot = mn_appendix,

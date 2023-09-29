@@ -1,7 +1,7 @@
 #/bin/bash
 
 # Array of model names
-mods=("keras1" "keras2" "keras3" "keras4" "keras5" "lightgbm" "lm" "pcr" "spcr") 
+mods=("keras1" "keras3" "lightgbm" "lm" "pcr" "spcr") 
 # Array of imputation types
 imps=("none" "em" "emar1" "bllp6" "ppca10" "ppca40" "indsize" "lastval")
 firmsets=("micro" "small" "big" "all")
@@ -20,7 +20,7 @@ for mod in ${mods[@]}; do
             Rscript \
                 --grid_submit=batch \
                 --grid_email="$USER@gsb.columbia.edu" \
-                --grid_mem=50G \
+                --grid_mem=75G \
                 5a_one_forecast.R \
                     --model=$mod \
                     --signal_file="bcsignals_${imp}.csv" \
