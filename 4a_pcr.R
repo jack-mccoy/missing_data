@@ -194,7 +194,8 @@ ncores <- floor(parallel::detectCores()*opt$cores_frac)
 doParallel::registerDoParallel(cores = ncores)
 
 pcr_pred <- foreach::"%dopar%"(foreach::foreach(
-  j = seq(1,n_pcs,opt$skip_n), .packages = c('data.table','zoo')
+  j = unique(c(1, seq(opt$skip_n, n_pcs, opt$skip_n), n_pcs)), 
+  .packages = c('data.table','zoo')
 ), {
 
   # Need EW and VW regressions as separate models

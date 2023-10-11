@@ -8,7 +8,7 @@ start_yr=1995
 end_yr=2020
 
 # Parameters for principal component regressions
-n_pcs=121 # number of PCs in maximal regression
+n_pcs=160 # number of PCs in maximal regression
 skip_n=10 # skipper in sequence
 n_years=10 # number of years for principal components/predictive regs
 quantile_prob=0.1 # quantile to form long/short portfolios (0.1 means deciles)

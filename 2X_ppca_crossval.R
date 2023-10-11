@@ -198,6 +198,8 @@ for (i in 1:opt$num_numPCs) {
     
 } # for i in 1:num_numPCs
 
+stop()
+
 # Aggregate over folds and signals
 rmsedat <- errsum[,
     .(
