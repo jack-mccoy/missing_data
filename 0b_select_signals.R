@@ -145,7 +145,7 @@ writeLines(
 
 writeLines(
   signaldoc2 %>% pull(signalname),
-  paste0(FILEPATHS$data_path, 'signals_best', nrow(signaldoc2), '_1985.txt')
+  paste0(FILEPATHS$data_path, 'signals_all_1985.txt')
 )
 
 #==============================================================================#
