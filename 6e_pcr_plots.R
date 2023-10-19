@@ -129,9 +129,9 @@ imp_list <- unique(sum_data$imp)
 for (cur_fore in fore_list) {
 
     if (cur_fore == "pca") {
-        pos <- c(25,86)/100
+        pos <- c(75, 63)/100
     } else {
-        pos <- c(70, 59)/100
+        pos <- c(75, 66)/100
     }
 
     # Elements common to all plots
@@ -160,7 +160,7 @@ for (cur_fore in fore_list) {
           shape = guide_legend(order = 1),
           linetype = guide_legend(order = 2)
         ) +
-        scale_linetype_manual(values = c('solid', 'longdash', 'dotted')) +
+        scale_linetype_manual(values = c('solid', 'twodash', 'dotted')) +
         scale_size_manual(values = c(0.8, 0.8, 0.5)) +
         scale_color_manual(values = c(MATRED, MATBLUE)) + 
         labs(
@@ -179,7 +179,7 @@ for (cur_fore in fore_list) {
           shape = guide_legend(order = 1),
           linetype = guide_legend(order = 2)
         ) +
-        scale_linetype_manual(values = c('solid', 'longdash', 'dotted')) +
+        scale_linetype_manual(values = c('solid', 'twodash', 'dotted')) +
         scale_size_manual(values = c(0.8, 0.8, 0.5)) +
         scale_color_manual(values = c(MATRED, MATBLUE)) + 
         labs(
@@ -194,14 +194,14 @@ for (cur_fore in fore_list) {
     mn_main <- plot_base_main + 
         geom_line(aes(y = rbar)) + 
         geom_point(aes(y = rbar)) + 
-        scale_y_continuous(breaks = seq(10, 50, 10), limits=c(0,55)) +
+        scale_y_continuous(breaks = seq(0, 50, 10), limits=c(-5,55)) +
         ylab("Annualized Mean Return (%)")
     stdev_main <- plot_base_main + geom_line(aes(y = vol)) +
         geom_point(aes(y = vol)) + 
         ylab("Annualized Std. Dev. (%)") 
     sharpe_main <- plot_base_main + geom_line(aes(y = sharpe)) + 
         geom_point(aes(y = sharpe)) + 
-        scale_y_continuous(breaks = seq(0.5, 3, 0.5), limits=c(0,3.25)) +
+        scale_y_continuous(breaks = seq(0, 3, 0.5), limits=c(-0.25,3.25)) +
         ylab("Annualized Sharpe Ratio") 
     alpha_capm_main <- plot_base_main + geom_line(aes(y = alpha_capm)) +
         geom_point(aes(y = alpha_capm)) + 
@@ -230,14 +230,14 @@ for (cur_fore in fore_list) {
   
     mn_appendix <- plot_base_appendix + geom_line(aes(y = rbar)) + 
         geom_point(aes(y = rbar)) +
-        scale_y_continuous(breaks = seq(10, 50, 10), limits=c(0,55)) +
+        scale_y_continuous(breaks = seq(0, 50, 10), limits=c(-5,55)) +
         ylab("Annualized Mean Return (%)")
     stdev_appendix <- plot_base_appendix + geom_line(aes(y = vol)) +
         geom_point(aes(y = vol)) +
         ylab("Annualized Std. Dev. (%)") 
     sharpe_appendix <- plot_base_appendix + geom_line(aes(y = sharpe)) + 
         geom_point(aes(y = sharpe)) +
-        scale_y_continuous(breaks = seq(0.5, 3, 0.5), limits=c(0,3.25)) +
+        scale_y_continuous(breaks = seq(0, 3, 0.5), limits=c(-0.25,3.25)) +
         ylab("Annualized Sharpe Ratio") 
     alpha_capm_appendix <- plot_base_appendix + geom_line(aes(y = alpha_capm)) +
         geom_point(aes(y = alpha_capm)) +
