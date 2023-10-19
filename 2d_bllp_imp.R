@@ -324,7 +324,7 @@ impute_one_month = function(yearm_cur){
 
 # hard code
 yearm_min = as.yearmon('1985-01')
-yearm_max = as.yearmon('2020-11')
+yearm_max = as.yearmon('2022-11')
 
 ymlist = bcsignals$yyyymm %>% unique()
 ymlist = ymlist[

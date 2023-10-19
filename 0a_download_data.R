@@ -81,8 +81,8 @@ crspm <- as.data.table(DBI::dbGetQuery(wrds, "
         ON a.permno=c.permno
         AND date_trunc('month', a.date) = date_trunc('month', c.dlstdt)
     WHERE /* Standard share and exchange code filter */
-        b.shrcd IN (10, 11, 12) AND
-        b.exchcd IN (1, 2, 3)
+        b.shrcd IN (10, 11, 12) AND /* 10, 11, 12: ordinary common shares */
+        b.exchcd IN (1, 2, 3, 31, 32, 33) /* 1: NYSE, 2: AMEX, 3: Nasdaq; 3X are 'when-issued' equivalents */ 
 ;"))
 
 ## Delisting returns ----

@@ -16,7 +16,7 @@ source("functions.R")
 #===============================================================================
 
 datebegin <- 1985
-dateend <- 2020
+dateend <- 2022
 
 # fix number of stocks in each leg to "control" for "signal loading" of mvn vs simple strats
 nstock_per_leg <- 500 

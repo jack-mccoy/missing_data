@@ -5,7 +5,7 @@ user_email="$USER@gsb.columbia.edu"
 
 # Parameters to control the jobs
 start_yr=1995
-end_yr=2020
+end_yr=2022
 
 # Parameters for principal component regressions
 n_pcs=160 # number of PCs in maximal regression
