@@ -38,9 +38,6 @@ option_list <- list(
     optparse::make_option(c("--scaled_pca"),
         type = "logical", default = FALSE,
         help = "logical to indicate if Huang et al 2022 scaled pca should be used"),  
-    optparse::make_option(c("--scaled_pca_weight"),
-        type = "character", default = "ew",
-        help = "ew or vw: allows value-weighted scaled pca"),
     optparse::make_option(c("--quantile_prob"),
         type = "numeric", default = 0.2,
         help = paste0("the ratio out of 1 used to form long-short portfolios ",
@@ -94,9 +91,11 @@ rm(crsp_data)
 signals[, yyyymm := as.yearmon(yyyymm)]
 
 # Filter down to months we are actually using for PCA
+# Ensure that it has market cap data
 signals <- signals[
     (pred_mon - opt$n_yrs) <= yyyymm &
-    yyyymm <= pred_mon
+    yyyymm <= pred_mon & 
+    !is.na(me)
 ]
 
 # Simple mean imputations. Shouldn't matter for EM-imputed data
@@ -132,22 +131,12 @@ signals[, time_avail_m := yyyymm + 1/12]
 
 if (opt$scaled_pca){
   
-    # set up weights
-    if (opt$scaled_pca_weight == 'ew'){
-        signals$tempw = 1
-    } else if (opt$scaled_pca_weight == 'vw') {
-        signals$tempw = signals$me
-    } else {
-        stop('opt$scaled_pca_weight invalid')
-    }
-    
     # regress bh1m on each signal, dropping current month's bh1m
     temp = lapply(
         signals_keep,
-        function(signalname){
+        function(signalname) {
             summary(lm(
-                paste0('bh1m ~ ', signalname), signals[time_avail_m < pred_mon],
-                weights = tempw
+                paste0('bh1m ~ ', signalname), signals[time_avail_m < pred_mon]
             ))$coefficients[signalname, 'Estimate']
         }
     )
@@ -188,48 +177,38 @@ ncores <- floor(parallel::detectCores()*opt$cores_frac)
 doParallel::registerDoParallel(cores = ncores)
 
 pcr_pred <- foreach::"%dopar%"(foreach::foreach(
-  j = unique(c(1, seq(opt$skip_n, n_pcs, opt$skip_n), n_pcs)), 
-  .packages = c('data.table','zoo')
+    j = unique(c(1, seq(opt$skip_n, n_pcs, opt$skip_n), n_pcs)), 
+    .packages = c('data.table','zoo')
 ), {
 
-  # Need EW and VW regressions as separate models
-  mod_ew <- lm(paste0("bh1m ~ ", paste(paste0("PC", 1:j), collapse = "+")), 
-    reg_data[time_avail_m < pred_mon])
-  mod_vw <- lm(paste0("bh1m ~ ", paste(paste0("PC", 1:j), collapse = "+")), 
-    reg_data[time_avail_m < pred_mon], 
-    weights = me) # Weight by the market cap
+    # Need EW and VW regressions as separate models
+    mod_ew <- lm(paste0("bh1m ~ ", paste(paste0("PC", 1:j), collapse = "+")), 
+        reg_data[time_avail_m < pred_mon])
 
-  # Get separate predictions
-  pred_ew <- predict(mod_ew, reg_data[time_avail_m == pred_mon])
-  pred_vw <- predict(mod_vw, # weighted predictions need to remove any NA weights
-    reg_data[time_avail_m == pred_mon & !is.na(me)])
-  wgts <- reg_data[time_avail_m == pred_mon & !is.na(me), me]
+    # Get predictions and weights
+    preds <- predict(mod_ew, reg_data[time_avail_m == pred_mon])
+    wgts <- reg_data[time_avail_m == pred_mon, me]
 
-  # Remove because they take up a lot of memory
-  rm(mod_ew, mod_vw)
+    # Remove because they take up a lot of memory
+    rm(mod_ew, mod_vw)
 
-  # Actual returns
-  rets_ew <- reg_data[time_avail_m == pred_mon, bh1m]
-  rets_vw <- reg_data[time_avail_m == pred_mon & !is.na(me), bh1m]
+    # Actual returns (need to ensure have market cap for VW ports)
+    rets <- reg_data[time_avail_m == pred_mon, bh1m]
 
-  # Get upper and lower quantiles for long-short portfolio formation
-  upper_ew <- quantile(pred_ew, probs = 1 - opt$quantile_prob, na.rm = T)
-  lower_ew <- quantile(pred_ew, probs = opt$quantile_prob, na.rm = T)
-  upper_vw <- quantile(pred_vw, probs = 1 - opt$quantile_prob, na.rm = T)
-  lower_vw <- quantile(pred_vw, probs = opt$quantile_prob, na.rm = T)
+    # Get upper and lower quantiles for long-short portfolio formation
+    upper <- quantile(preds, probs = 1 - opt$quantile_prob, na.rm = T)
+    lower <- quantile(preds, probs = opt$quantile_prob, na.rm = T)
 
-  cat("Finished PC", j, "\n")
+    cat("Finished PC", j, "\n")
 
-  # Return 1-row data table of long-short returns
-  data.table(
-    ew_ls = mean(rets_ew[pred_ew > upper_ew], na.rm = T) - 
-      mean(rets_ew[pred_ew < lower_ew], na.rm = T),
-    vw_ls = weighted.mean(rets_vw[pred_vw > upper_vw], 
-            w = wgts[pred_vw > upper_vw], na.rm = T) - 
-        weighted.mean(rets_vw[pred_vw < lower_vw], 
-            w = wgts[pred_vw < lower_vw], na.rm = T),
-    pc = j # Labelling
-  )
+    # Return 1-row data table of long-short returns
+    data.table(
+        ew_ls = mean(rets[preds > upper], na.rm = T) - 
+            mean(rets[preds < lower], na.rm = T),
+        vw_ls = weighted.mean(rets_vw[preds > upper], w = wgts[preds > upper], na.rm = T) - 
+            weighted.mean(rets_vw[preds < lower], w = wgts[preds < lower], na.rm = T),
+        pc = j # Labelling
+    )
 
 })
 
@@ -238,11 +217,7 @@ pcr_pred <- foreach::"%dopar%"(foreach::foreach(
 #==============================================================================#
 
 if (opt$scaled_pca) {
-    if (opt$scaled_pca_weight == "ew") {
-        fcast <- "spca1"
-    } else {
-        fcast <- "spca2"
-    }
+    fcast <- "spca"
 } else {
     fcast <- "pca"
 }

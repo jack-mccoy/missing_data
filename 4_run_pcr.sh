@@ -21,17 +21,12 @@ sample_start_yr=$(($start_yr-$n_years))
 # But they each run relatively quickly
 for _yr in $(eval echo "{$start_yr..$end_yr}"); do
     for imp in "none" "em" "bllp6"; do
-        for forecast in "pca" "spca1"; do 
+        for forecast in "pca" "spca"; do 
             
             if [ $forecast = "pca" ]; then
                 scaled_pca="FALSE"
-                scaled_pca_weight="ew"
-            elif [ $forecast = "spca1" ]; then
+            elif [ $forecast = "spca" ]; then
                 scaled_pca="TRUE"
-                scaled_pca_weight="ew"
-            elif [ $forecast = "spca2" ]; then
-                scaled_pca="TRUE"
-                scaled_pca_weight="vw"
             fi
             
             # Run the PCR for the given imputation and forecast type
@@ -43,7 +38,6 @@ for _yr in $(eval echo "{$start_yr..$end_yr}"); do
                 4a_pcr.R \
                     --signal_file="bcsignals_${imp}.csv" \
                     --scaled_pca=$scaled_pca \
-                    --scaled_pca_weight=$scaled_pca_weight \
                     --iter_year=$_yr \
                     --n_yrs=$n_years \
                     --quantile_prob=$quantile_prob \
