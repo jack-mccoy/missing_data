@@ -190,9 +190,9 @@ pcr_pred <- foreach::"%dopar%"(foreach::foreach(
 
     # Return 1-row data table of long-short returns
     data.table(
-        permno = reg_data[time_avail_m == pred_mon, permno],
-        yyyymm = reg_data[time_avail_m == pred_mon, yyyymm],
-        Ebh1m = preds,
+        permno = reg_data[time_avail_m == pred_mon, permno], # all the permnos
+        pred_mon = pred_mon, # month of the prediction
+        Ebh1m = preds, # all the predictions
         pc = j # Labelling
     )
 

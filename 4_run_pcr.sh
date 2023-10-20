@@ -20,7 +20,7 @@ sample_start_yr=$(($start_yr-$n_years))
 # These take up so much memory that I need to do one year at a time
 # But they each run relatively quickly
 for _yr in $(eval echo "{$start_yr..$end_yr}"); do
-    for imp in "none" "em" "bllp6"; do
+    for imp in "none"; do
         for forecast in "pca" "spca"; do 
             
             if [ $forecast = "pca" ]; then
@@ -32,7 +32,7 @@ for _yr in $(eval echo "{$start_yr..$end_yr}"); do
             # Run the PCR for the given imputation and forecast type
             Rscript --grid_submit=batch \
                 --grid_ncpus=12 \
-                --grid_mem=250G \
+                --grid_mem=50G \
                 --grid_SGE_TASK_ID=1-12 \
                 --grid_email=$user_email \
                 4a_pcr.R \
