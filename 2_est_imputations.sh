@@ -27,8 +27,7 @@ if [ $1 = "ppca" ]; then
             --start_yr=1985 \
             --end_yr=2021 \
             --maxiter=100000 \
-            --n_pcs=$2 \
-            --firmset=$3
+            --n_pcs=$2
 fi
 
 if [ $1 = "bllp" ]; then

@@ -22,12 +22,6 @@ source("functions.R")
 on_cluster = Sys.getenv('SGE_TASK_ID') != ""
 
 option_list <- list(
-    #optparse::make_option(c("--out_path"),
-    #    type = "character", default = "../output/pca_returns/em/",
-    #    help = "directory to store output to"),
-    #optparse::make_option(c("--signals_keep"),
-    #    type = "character", default = "../output/signals_10.txt",
-    #    help = "a comma-separated list of values or .txt file to scan"),
     optparse::make_option(c("--signal_file"),
         type = "character", default = "bcsignals_em.csv",
         help = "path of imputed file"),
