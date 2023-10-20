@@ -8,7 +8,7 @@ firmsets=("micro" "small" "big" "all")
 
 # Start and end dates
 yearm_begin="1995-06"
-yearm_end="2022-06"
+yearm_end="2021-06"
 
 # Paths
 output_folder="auto"

@@ -56,7 +56,7 @@ optcmd <- optparse::OptionParser(
             type = "character", default = '1995-06',
             help = "first in-sample end"),
         optparse::make_option(c("--yearm_end"),
-            type = "character", default = '2020-06',
+            type = "character", default = '2021-06',
             help = "last in-sample end")
     )
 )  %>% optparse::parse_args()

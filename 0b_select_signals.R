@@ -24,7 +24,7 @@ source("functions.R")
 
 # user
 date_start <- 1985
-date_end <- 2022
+date_end <- 2021
 
 #==============================================================================#
 # Read in, create obs table, and select 125 signals  ----
