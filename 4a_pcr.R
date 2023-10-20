@@ -187,26 +187,12 @@ pcr_pred <- foreach::"%dopar%"(foreach::foreach(
 
     # Get predictions and weights
     preds <- predict(mod_ew, reg_data[time_avail_m == pred_mon])
-    wgts <- reg_data[time_avail_m == pred_mon, me]
-
-    # Remove because they take up a lot of memory
-    rm(mod_ew, mod_vw)
-
-    # Actual returns (need to ensure have market cap for VW ports)
-    rets <- reg_data[time_avail_m == pred_mon, bh1m]
-
-    # Get upper and lower quantiles for long-short portfolio formation
-    upper <- quantile(preds, probs = 1 - opt$quantile_prob, na.rm = T)
-    lower <- quantile(preds, probs = opt$quantile_prob, na.rm = T)
-
-    cat("Finished PC", j, "\n")
 
     # Return 1-row data table of long-short returns
     data.table(
-        ew_ls = mean(rets[preds > upper], na.rm = T) - 
-            mean(rets[preds < lower], na.rm = T),
-        vw_ls = weighted.mean(rets_vw[preds > upper], w = wgts[preds > upper], na.rm = T) - 
-            weighted.mean(rets_vw[preds < lower], w = wgts[preds < lower], na.rm = T),
+        permno = reg_data[time_avail_m == pred_mon, permno],
+        yyyymm = reg_data[time_avail_m == pred_mon, yyyymm],
+        Ebh1m = preds,
         pc = j # Labelling
     )
 
@@ -228,17 +214,17 @@ outfolder <- paste0( # Name based on forecast and imputation
     str_remove(str_remove(basename(opt$signal_file), '.csv'), "bcsignals_")
 )
 
-dir.create(paste0(FILEPATHS$out_path, "pca_returns/"), showWarnings = FALSE)
-dir.create(paste0(FILEPATHS$out_path, "pca_returns/", outfolder),
+dir.create(paste0(FILEPATHS$out_path, "pca_forecasts/"), showWarnings = FALSE)
+dir.create(paste0(FILEPATHS$out_path, "pca_forecasts/", outfolder),
     showWarnings = FALSE)
 
 fwrite(
     rbindlist(pcr_pred)[, n_signals := length(signals_keep)], 
     paste0(
         FILEPATHS$out_path, 
-        "pca_returns/",
+        "pca_forecasts/",
         outfolder,
-        '/ret_pc_', format(pred_mon, '%Y_%m'), '.csv'
+        '/fcasts_', format(pred_mon, '%Y_%m'), '.csv'
     )
 )
 
