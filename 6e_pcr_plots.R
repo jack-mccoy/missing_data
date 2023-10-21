@@ -21,7 +21,7 @@ source('functions.R')
 # Project-level file paths
 getFilePaths()
 
-pc_ret_path <- paste0(FILEPATHS$out_path, "pca_returns/")
+pc_ret_path <- paste0(FILEPATHS$out_path, "pca_forecasts/")
 plot_path <- paste0(FILEPATHS$out_path, 'plots/')
 
 dir.create(plot_path, showWarnings = FALSE)

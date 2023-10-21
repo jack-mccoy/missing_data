@@ -23,8 +23,8 @@ source("functions.R")
 #==============================================================================#
 
 # user
-date_start <- 1985
-date_end <- 2021
+date_start <- as.yearmon("Jan 1985")
+date_end <- as.yearmon("Dec 2021")
 
 #==============================================================================#
 # Read in, create obs table, and select 125 signals  ----
@@ -85,11 +85,13 @@ obs_by_date = obs[
   group_by(signalname)
 
 # find gaps
-gaps_all = obs_by_date %>% 
-  filter(
-    yyyymm >= date_start, yyyymm <= date_end, obs < 2
-  ) %>% 
-  arrange(signalname, yyyymm) 
+gaps_all <- obs_by_date %>% 
+    filter(
+        yyyymm >= date_start,
+        yyyymm <= date_end,
+        obs < 2
+    ) %>% 
+    arrange(signalname, yyyymm) 
 
 list_gap = gaps_all %>% distinct(signalname, .keep_all = T) %>% pull(signalname)
 
@@ -118,7 +120,6 @@ mostobs1985 = obs[floor(yyyymm) == 1985]  %>%
   ) %>% 
   arrange(-mean_pct_obs) %>% 
   mutate(rank = row_number())  %>% 
-  #filter(rank <= 125) %>% 
   setDT()
   
 obs = obs %>% select(permno,yyyymm,all_of(mostobs1985$signalname))
