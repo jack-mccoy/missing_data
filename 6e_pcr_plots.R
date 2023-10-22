@@ -40,8 +40,9 @@ ff5_mom <- fread(paste0(FILEPATHS$data_path, 'raw/ff5_factors.csv'))
 
 # load up specs in pc_ret_path
 spec_dat <- data.table(dir = list.files(pc_ret_path))[, ":="(
-    forecast = str_split_fixed(basename(dir), '_', 2)[,1],
-    imp = str_split_fixed(basename(dir), '_', 2)[,2]
+    forecast = str_split_fixed(basename(dir), '_', 3)[,1],
+    imp = str_split_fixed(basename(dir), '_', 3)[,2],
+    firmset = str_split_fixed(basename(dir), '_', 3)[,3]
 )]
  
 # function for importing one spec
@@ -49,27 +50,19 @@ import_ret_csv <- function(cur_spec) {
   
     list_csv_files <- list.files(path = paste0(pc_ret_path,cur_spec$dir), 
         full.names = TRUE)
-    ret <- lapply(list_csv_files,
+    ret <- rbindlist(lapply(list_csv_files,
         function(fname){
-            fname = as.vector(fname)
-            ym = str_replace(substr(fname, nchar(fname)-10, nchar(fname)-4), 
-                '_', '-')
-            ym = as.yearmon(ym)
-            ret = fread(fname)
-            ret$yyyymm = ym
-            ret$date = as.Date(ret$yyyymm)
-            ret
+            fname <- as.vector(fname)
+            tmp <- fread(fname)
+            tmp[, ":="(
+                yyyymm = as.yearmon(yyyymm),
+                date = as.yearmon(yyyymm)
+            )]
+            return(tmp)
         }
-    )
-    ret <- do.call(rbind, ret)
-    ret <- melt(ret,
-        id.vars = c('pc','n_signals','yyyymm','date'),
-        variable.name = 'weighting',
-        value.name = 'ls_ret'
-    )
-    ret[, weighting := gsub("ew_ls", "Equal", weighting)]
-    ret[, weighting := gsub("vw_ls", "Value", weighting)]
+    ))
     ret$forecast <- cur_spec$forecast
+    ret$firmset <- cur_spec$firmset
     if (cur_spec$imp %in% names(imp_names)) { 
         ret$imp <- imp_names[cur_spec$imp]
     } else {
@@ -78,15 +71,76 @@ import_ret_csv <- function(cur_spec) {
     return(ret)
 }
 
-# import all specs
-ret <- rbindlist(lapply(1:dim(spec_dat)[1], 
-    function(i) import_ret_csv(spec_dat[i, ]))) 
+# import all firm-month level forecasts
+fcasts <- rbindlist(lapply(1:dim(spec_dat)[1], 
+    function(i) import_ret_csv(spec_dat[i, ])))
+
+# Filter to make sure that we have all the necessary groups for separate
+# then group all the "separate" together
+fcasts[ # Count number of groups for separately estimated forecasts
+    firmset != "all", 
+    n_groups := length(unique(firmset)),
+    by = .(yyyymm, forecast, imp, pc)
+]
+fcasts <- fcasts[ # separately estd forecasts should have 3 groups each
+    (n_groups == 3 & firmset != "all") | 
+    (is.na(n_groups) & firmset == "all")
+][, # Now group all the "separate" estimates together for when forming portfolios
+    firmset := dplyr::case_when(
+        firmset %in% c("micro", "small", "big") ~ "separate",
+        TRUE ~ "all"
+    )
+]
+
+#===============================================================================
+# Create long-short portfolios
+#===============================================================================
+
+# Define deciles
+fcasts[,
+    ":="(
+        pctile10 = quantile(Ebh1m, 0.1, na.rm = TRUE),
+        pctile90 = quantile(Ebh1m, 0.9, na.rm = TRUE)
+    ),
+    by = .(yyyymm, forecast, imp, firmset, pc)
+][,
+    decile := ifelse(Ebh1m <= pctile10, 1, ifelse(Ebh1m >= pctile90, 10, NA)) 
+]
+
+# Average portfolios by prediction decile for month, method, and imp
+# make negative (short) if lowest decile
+ports <- fcasts[
+    decile %in% c(1, 10), 
+    .(
+        ew = mean(ifelse(decile == 1, -1, 1) * bh1m, na.rm = TRUE),
+        vw = weighted.mean(ifelse(decile == 1, -1, 1) * bh1m, w = me, na.rm = T)
+    ),
+    by = .(yyyymm, forecast, imp, firmset, decile, pc)
+]
+
+# Mean portfolios for each leg
+ports_mean <- ports[, 
+    .(ew = mean(ew), vw = mean(vw)),
+    by = .(forecast, imp, firmset, decile, pc)
+]
+
+# Long-short portfolios (annualized)
+ls_ports_mean <- ports_mean[, 
+    .(ew = 12*sum(ew), vw = 12*sum(vw)),
+    by = .(forecast, imp, firmset, pc)
+]
+
+# Melt to have weighting as a categorical variable (instead of separate cols)
+ret <- melt(ls_ports_mean,
+    id.vars = c("forecast", "imp", "firmset", "pc"),
+    variable.name = "weighting",
+    value.name = "ls_ret")
 
 # cumulative returns
 ret[
     order(forecast, imp, weighting, pc, yyyymm),
     cumret := log(cumprod(1 + ifelse(is.na(ls_ret/100), 0, ls_ret/100))),
-    by = .(forecast, imp, weighting, pc)
+    by = .(forecast, imp, weighting, pc, firmset)
 ]
 
 #===============================================================================#
@@ -108,7 +162,7 @@ sum_data <- reg_data[,
         sharpe = mean(ls_ret)/sd(ls_ret)*sqrt(12),
         vol = sd(ls_ret)*sqrt(12)
     ),
-    by = c('forecast', 'imp', 'pc', 'weighting')
+    by = c('forecast', 'imp', 'pc', 'weighting', 'firmset')
 ][
     imp %in% imp_names
 ]

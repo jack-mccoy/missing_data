@@ -2,7 +2,6 @@
 
 # They are all the same so write it here
 user_email="$USER@gsb.columbia.edu"
-#signals_list="../data/signals_best125_1985.txt"
 
 if [ $1 = "em" ]; then
     Rscript --grid_submit=batch \
@@ -15,7 +14,6 @@ if [ $1 = "em" ]; then
             --maxiter=100000 \
             --ar1_sample_length=5 \
             --tol=1e-4
-            #-f
 fi
 
 if [ $1 = "ppca" ]; then

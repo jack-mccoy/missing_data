@@ -299,22 +299,6 @@ bcsignals_emar1 <- foreach::"%dopar%"(foreach::foreach(
     em_out <- mvn_emf(mat_resid, E0, R0, maxiter = opt$maxiter, tol = opt$tol,
         update_estE = FALSE)
     
-    ## output log file if no convergence
-    #if (em_out$maxiter >= opt$maxiter){
-    #    sink('3b_ar1_em_est.err')
-    #    Sys.time()
-    #    print('ar1_em_est.R error: divergence')
-    #    i
-    #    impute_vec
-    #    print('iter, tolerance')
-    #    em_out$maxiter
-    #    em_out$tol
-    #    print('E0')
-    #    E0
-    #    
-    #    sink()
-    #}
-    
     # Ensure that imputation converged
     if (em_out$maxiter >= opt$maxiter) {
         if (opt$force_convergence) {
@@ -326,7 +310,7 @@ bcsignals_emar1 <- foreach::"%dopar%"(foreach::foreach(
                   tol = opt$tol,
                   update_estE = FALSE)
             }
-        } else {
+        } else { # Or note if it didn't
             dir.create(paste0(FILEPATHS$out_path, "em_convergence/"))
             sink(paste0(paste0(FILEPATHS$out_path, "em_convergence/maxiter_", gsub(" ", "", i), "_", opt$em_type)))
             cat(Sys.time())

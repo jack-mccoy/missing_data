@@ -48,6 +48,13 @@ option_list <- list(
     optparse::make_option(c("--skip_n"),
         type = "numeric", default = 1,
         help = "number of PCs to skip. i.e. will have sequence seq(1, n_pcs, skip_n)"),
+    optparse::make_option(c("--firmset"),
+        type = "character", default = "all",
+        help = paste0(
+            "firm set to impute. one of (micro,small,big,all). ",
+            "micro is below 20th ptile NYSE ME, small is 20th to 50th, ",
+            "and big is 50th and above."
+        )),
     optparse::make_option(c("--cores_frac"),
         type = "numeric", default = 1.0,
         help = "fraction of total cores to use")
@@ -126,6 +133,21 @@ signals[
 signals[, time_avail_m := yyyymm + 1/12]
 
 #==============================================================================# 
+# Filter by size after doing leads
+#==============================================================================#
+
+# Filter firmset here *after* simple mean impute, 
+# so that we always follow order (impute all together) -> (filter) -> (predict)
+if (opt$firmset %in% c("micro", "small", "big")) {
+    signals <- filterFirms(signals, opt$firmset, FILEPATHS)
+} else {
+    if (opt$firmset != "all") {
+        warning("`--firmset` was not correctly specified as one of (micro,small,big,all)!\n")
+    }
+    cat("Estimating for all firms...\n")
+}
+
+#==============================================================================# 
 # Huang et al. Scaling (optional) ----
 #==============================================================================#
 
@@ -191,8 +213,10 @@ pcr_pred <- foreach::"%dopar%"(foreach::foreach(
     # Return 1-row data table of long-short returns
     data.table(
         permno = reg_data[time_avail_m == pred_mon, permno], # all the permnos
-        pred_mon = pred_mon, # month of the prediction
+        yyyymm = pred_mon, # month of the prediction
         Ebh1m = preds, # all the predictions
+        bh1m = reg_data[time_avail_m == pred_mon, bh1m], # actual return
+        me = reg_data[time_avail_m == pred_mon, me], # Market cap (begin of month)
         pc = j # Labelling
     )
 
@@ -211,7 +235,8 @@ if (opt$scaled_pca) {
 # Automatic output folder based on dataset
 outfolder <- paste0( # Name based on forecast and imputation
     fcast, "_", 
-    str_remove(str_remove(basename(opt$signal_file), '.csv'), "bcsignals_")
+    str_remove(str_remove(basename(opt$signal_file), '.csv'), "bcsignals_"), "_",
+    opt$firmset
 )
 
 dir.create(paste0(FILEPATHS$out_path, "pca_forecasts/"), showWarnings = FALSE)

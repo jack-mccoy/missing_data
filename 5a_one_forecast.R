@@ -43,7 +43,7 @@ optcmd <- optparse::OptionParser(
             type = "character", default = "bcsignals_none.csv",
             help = "permno-month-signal csv"),
         optparse::make_option(c("--firmset"),
-            type = "character", default = "bcsignals_none.csv",
+            type = "character", default = "all",
             help = paste0(
                 "firm set to impute. one of (micro,small,big,all). ",
                 "micro is below 20th ptile NYSE ME, small is 20th to 50th, ",
