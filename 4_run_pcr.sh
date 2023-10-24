@@ -5,7 +5,7 @@ user_email="$USER@gsb.columbia.edu"
 
 # Parameters to control the jobs
 start_yr=1995
-end_yr=1995
+end_yr=2021
 
 # Parameters for principal component regressions
 n_pcs=160 # number of PCs in maximal regression
@@ -22,7 +22,7 @@ sample_start_yr=$(($start_yr-$n_years))
 for _yr in $(eval echo "{$start_yr..$end_yr}"); do
     for imp in "none"; do
         for forecast in "pca"; do 
-            for firmset in "micro"; do
+            for firmset in "micro" "small" "big"; do
             
                 if [ $forecast = "pca" ]; then
                     scaled_pca="FALSE"
