@@ -27,10 +27,10 @@ date_start <- as.yearmon("Jan 1985")
 date_end <- as.yearmon("Dec 2021")
 
 #==============================================================================#
-# Read in, create obs table, and select 125 signals  ----
+# Read in, create obs table, and select signals  ----
 #==============================================================================#
 
-# Get the file paths
+## Get the file paths ----
 getFilePaths(signal_list_exists = FALSE) # signal list not yet made
 
 ## read ----
@@ -53,6 +53,7 @@ signaldoc = fread(paste0(FILEPATHS$data_path, 'raw/SignalDoc.csv'))  %>%
   ) %>% 
   select(
     signalname, Authors, Year, starts_with('Cat.'), starts_with('Sample')
+    , LongDescription
   ) %>% 
   mutate(signalname = tolower(signalname)) %>% 
   filter(
@@ -99,12 +100,11 @@ obs = obs %>% select(-c(list_gap))
 
 gc()
 
-## keep only most obs in 1985 ----
+## find most obs in 1985 ----
 
 # we do this double averaging for historical reasons
 # even though a single average is probably just fine.
 
- 
 mostobs1985 = obs[floor(yyyymm) == 1985]  %>% 
   group_by(yyyymm) %>% 
   summarize_all(sum) %>% 
@@ -150,10 +150,10 @@ writeLines(
 )
 
 #==============================================================================#
-# Output lists of predictors ----
+# Table: Long List of Predictors and Obs ----
 #==============================================================================#
 
-dir.create(paste0(FILEPATHS$out_path, "tables/"))
+dir.create(paste0(FILEPATHS$out_path, "tables/"), showWarnings = FALSE)
 
 final_list = signaldoc2 %>% 
   mutate(
@@ -164,7 +164,7 @@ final_list = signaldoc2 %>%
   ) %>% 
   arrange(rank1985) 
 
-# Create Latex output table 1: Clear Predictors
+# Create Latex output table
 outputtable1 <- xtable(
   final_list 
   , digits = c(0,0,0,1,0)
@@ -176,6 +176,64 @@ print(outputtable1,
       hline.after = NULL,
       only.contents = TRUE,
       file = paste0(FILEPATHS$out_path, 'tables/long_list.tex'))
+
+#==============================================================================#
+# Table: Short List ----
+#==============================================================================#
+
+shortlist = c(
+  'size', 'mom12m'
+  ,'assetgrowth','bm'
+  ,'meanrankrevgrowth','momseason11yrplus'
+  , 'analystrevision','adexp','tang'
+  ,'ageipo'
+  ,'earningsstreak'
+  ,'retconglomerate','customermomentum'
+  ,'io_shortinterest', 'payoutyield'
+)
+
+# clean up
+tabclean = signaldoc2 %>% 
+  filter(signalname %in% shortlist) %>% 
+  mutate(AuthorYear = paste0(Authors, ' ', Year)) %>% 
+  select(LongDescription, AuthorYear, Cat.Data, pct_obs_1985) %>% 
+  mutate(
+    LongDescription = str_to_title(LongDescription)
+    , LongDescription = str_replace(LongDescription, 'Eps', 'EPS')
+    , LongDescription = str_replace(LongDescription, 'Ipo', 'IPO')
+    , LongDescription = str_replace(LongDescription, 'And', 'and')
+    , LongDescription = case_when(
+      grepl('(12 Month)', LongDescription) ~ '12-Month Momentum'
+      , grepl('Book To', LongDescription) ~ 'Book-to-Market'
+      , grepl('Return Season', LongDescription) ~ 'Ret Seasonality Yr 11-15'
+      , grepl('Inst Own', LongDescription) ~ 'Inst Own for High Short Int'
+      , grepl('Tangib', LongDescription) ~ 'Asset Tangibility'
+      , TRUE ~ LongDescription
+    )
+    , AuthorYear = case_when(
+      grepl('Chan, Lakon', AuthorYear) ~ 'Chan et al. 2001'
+      , TRUE ~ AuthorYear
+    )
+    , Cat.Data = if_else(!Cat.Data %in% c('Accounting','Price','Analyst','Trading')
+      , 'Other', Cat.Data)
+  ) %>% 
+  rename(
+    'Predictor' = LongDescription
+    , 'Reference' = AuthorYear
+    , 'Data Focus' = Cat.Data
+    , '% Obs' = pct_obs_1985
+  ) 
+
+# output latex table using booktabs
+xtable(
+  tabclean 
+  , digits = c(0,0,0,0,1)
+  , align = c('l','l','l','l','r')
+) %>% 
+  print(
+    file = paste0(FILEPATHS$out_path, 'tables/short_list.tex')
+      , floating = FALSE, booktabs = TRUE, include.rownames = FALSE
+  )
 
 #==============================================================================#
 # Check (to console, for now) ----
