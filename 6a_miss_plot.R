@@ -25,7 +25,7 @@ dat <- fread(paste0(FILEPATHS$data_path, "bcsignals/bcsignals_none.csv"))[
 ]
 
 # import get data categories
-signaldoc = fread(paste0(FILEPATHS$data_path, "raw/SignalDoc.csv "))
+signaldoc = fread(paste0(FILEPATHS$data_path, "raw/SignalDoc.csv"))
 signaldoc[ , signalname := tolower(Acronym)]
 signaldoc = signaldoc[ , .(signalname, Cat.Data, Cat.Economic)]
 
