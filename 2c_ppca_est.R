@@ -27,7 +27,7 @@ option_list <- list(
         type = "numeric", default = 2,
         help = "number of principal components to estimate"),
     optparse::make_option(c("--firmset"),
-        type = "character", default = "big",
+        type = "character", default = "all",
         help = paste0(
             "firm set to impute. one of (micro,small,big,all). ",
             "micro is below 20th ptile NYSE ME, small is 20th to 50th, ",

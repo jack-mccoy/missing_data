@@ -37,6 +37,8 @@ imp_names <- setNames(
 
 # ff factors
 ff5_mom <- fread(paste0(FILEPATHS$data_path, 'raw/ff5_factors.csv'))
+setnames(ff5_mom, "date", "yyyymm")
+ff5_mom$yyyymm <- as.yearmon(ff5_mom$yyyymm)
 
 # load up specs in pc_ret_path
 spec_dat <- data.table(dir = list.files(pc_ret_path))[, ":="(
@@ -109,36 +111,39 @@ fcasts[,
 
 # Average portfolios by prediction decile for month, method, and imp
 # make negative (short) if lowest decile
-ports <- fcasts[
+ls_ports <- fcasts[
     decile %in% c(1, 10), 
     .(
         ew = mean(ifelse(decile == 1, -1, 1) * bh1m, na.rm = TRUE),
         vw = weighted.mean(ifelse(decile == 1, -1, 1) * bh1m, w = me, na.rm = T)
     ),
     by = .(yyyymm, forecast, imp, firmset, decile, pc)
-]
-
-# Mean portfolios for each leg
-ports_mean <- ports[, 
-    .(ew = mean(ew), vw = mean(vw)),
-    by = .(forecast, imp, firmset, decile, pc)
-]
-
-# Long-short portfolios (annualized)
-ls_ports_mean <- ports_mean[, 
-    .(ew = 12*sum(ew), vw = 12*sum(vw)),
-    by = .(forecast, imp, firmset, pc)
+][,
+    .(ew = sum(ew), vw = sum(vw)),
+    by = .(yyyymm, forecast, imp, firmset, pc)
 ]
 
 # Melt to have weighting as a categorical variable (instead of separate cols)
-ret <- melt(ls_ports_mean,
-    id.vars = c("forecast", "imp", "firmset", "pc"),
+ret <- melt(ls_ports,
+    id.vars = c("forecast", "imp", "firmset", "pc", "yyyymm"),
     variable.name = "weighting",
     value.name = "ls_ret")
 
+## Mean portfolios for each leg
+#ports_mean <- ports[, 
+#    .(ew = mean(ew), vw = mean(vw)),
+#    by = .(forecast, imp, firmset, decile, pc)
+#]
+#
+## Long-short portfolios (annualized)
+#ls_ports_mean <- ports_mean[, 
+#    .(ew = 12*sum(ew), vw = 12*sum(vw)),
+#    by = .(forecast, imp, firmset, pc)
+#]
+
 # cumulative returns
 ret[
-    order(forecast, imp, weighting, pc, yyyymm),
+    order(forecast, imp, weighting, pc, firmset, yyyymm),
     cumret := log(cumprod(1 + ifelse(is.na(ls_ret/100), 0, ls_ret/100))),
     by = .(forecast, imp, weighting, pc, firmset)
 ]
@@ -149,7 +154,7 @@ ret[
 
 # Merge data to align PC returns with FF5 factors
 # check timing -ac
-reg_data <- merge(ret, ff5_mom, by = 'date') %>% 
+reg_data <- merge(ret, ff5_mom, by = "yyyymm") %>% 
     filter(!is.na(ls_ret), !is.na(mktrf))
 
 sum_data <- reg_data[,
@@ -167,7 +172,12 @@ sum_data <- reg_data[,
     imp %in% imp_names
 ]
 
+# Better labeling and factor ordering for plots
 sum_data[, imp := factor(imp, levels = imp_names)]
+sum_data[, weighting := dplyr::case_when(
+    weighting == "ew" ~ "Equal",
+    weighting == "vw" ~ "Value"
+)]
 
 #===============================================================================#
 # Plots
@@ -178,172 +188,178 @@ scale_gg <- 0.55
 Npc_max <- 80 
 
 fore_list <- unique(sum_data$forecast)
-imp_list <- unique(sum_data$imp)
+firmset_list <- unique(sum_data$firmset)
 
-for (cur_fore in fore_list) {
-
-    if (cur_fore == "pca") {
-        pos <- c(75, 63)/100
-    } else {
-        pos <- c(75, 66)/100
+for (cur_firmset in firmset_list) {
+    for (cur_fore in fore_list) {
+    
+        if (cur_fore == "pca") {
+            pos <- c(75, 63)/100
+        } else {
+            pos <- c(75, 66)/100
+        }
+    
+        # Elements common to all plots
+        common_theme <- theme_bw() + 
+            theme(
+                legend.position = pos,
+                legend.background = element_blank(),
+                legend.key = element_blank(),
+                legend.spacing.y = unit(0.005, 'cm'),
+                legend.spacing.x = unit(0.06, 'cm'),
+                legend.box = 'horizontal',
+                legend.key.width = unit(0.55, 'cm'),
+                legend.key.height = unit(0.38, 'cm'),
+                legend.text = element_text(size = 6),
+                legend.title = element_text(size = 7)
+            )
+      
+        # All the line plots will have same basic look
+        plot_base_main <- ggplot(
+                sum_data[
+                    forecast == cur_fore &
+                    firmset == cur_firmset & 
+                    imp != "BLLP loc B-XS"
+                ], 
+                aes(x = pc, colour = weighting, shape = weighting, linetype = imp)
+            ) + 
+            common_theme  +
+            guides(
+                colour = guide_legend(order = 1),
+                shape = guide_legend(order = 1),
+                linetype = guide_legend(order = 2)
+            ) +
+            scale_linetype_manual(values = c('solid', 'twodash', 'dotted')) +
+            scale_size_manual(values = c(0.8, 0.8, 0.5)) +
+            scale_color_manual(values = c(MATRED, MATBLUE)) + 
+            labs(
+                colour = "Stock Weights",
+                linetype = "Imputation",
+                shape = "Stock Weights",
+                x = "Number of PCs"
+            )
+        plot_base_appendix <- ggplot(
+                sum_data[forecast == cur_fore & firmset == cur_firmset], 
+                aes(x = pc, colour = weighting, shape = weighting, linetype = imp)
+            ) + 
+            common_theme  +
+            guides(
+                colour = guide_legend(order = 1),
+                shape = guide_legend(order = 1),
+                linetype = guide_legend(order = 2)
+            ) +
+            scale_linetype_manual(values = c('solid', 'twodash', 'dotted')) +
+            scale_size_manual(values = c(0.8, 0.8, 0.5)) +
+            scale_color_manual(values = c(MATRED, MATBLUE)) + 
+            labs(
+                colour = "Stock Weights",
+                linetype = "Imputation",
+                shape = "Stock Weights",
+                x = "Number of PCs"
+            )
+    
+        # Main figure plots ====
+      
+        mn_main <- plot_base_main + 
+            geom_line(aes(y = rbar)) + 
+            geom_point(aes(y = rbar)) + 
+            scale_y_continuous(breaks = seq(0, 50, 10), limits=c(-5,55)) +
+            ylab("Annualized Mean Return (%)")
+        stdev_main <- plot_base_main + geom_line(aes(y = vol)) +
+            geom_point(aes(y = vol)) + 
+            ylab("Annualized Std. Dev. (%)") 
+        sharpe_main <- plot_base_main + geom_line(aes(y = sharpe)) + 
+            geom_point(aes(y = sharpe)) + 
+            scale_y_continuous(breaks = seq(0, 3, 0.5), limits=c(-0.25,3.25)) +
+            ylab("Annualized Sharpe Ratio") 
+        alpha_capm_main <- plot_base_main + geom_line(aes(y = alpha_capm)) +
+            geom_point(aes(y = alpha_capm)) + 
+            ylab('Annualized CAPM Alpha (%)')
+        alpha_ff5_main <- plot_base_main + geom_line(aes(y = alpha_ff5)) +
+            geom_point(aes(y = alpha_ff5)) + 
+            ylab('Annualized FF5 + Mom Alpha (%)')
+      
+        ggsave(plot = mn_main,
+            filename = paste0(plot_path, cur_fore, "_", cur_firmset, "_expected_rets_main.pdf"),
+            width = 8, height = 5, unit = "in", scale = scale_gg)
+      
+        ggsave(plot = sharpe_main, 
+            filename = paste0(plot_path, cur_fore, "_", cur_firmset,"_sharpes_main.pdf"),
+            width = 8, height = 5, unit = "in", scale = scale_gg)
+        
+        ggsave(plot = alpha_capm_main,
+            filename = paste0(plot_path, cur_fore, "_", cur_firmset,"_alpha_capm_main.pdf"),
+            width = 8, height = 5, unit = "in", scale = scale_gg)
+        
+        ggsave(plot = alpha_ff5_main, 
+            filename = paste0(plot_path, cur_fore, "_", cur_firmset,"_alpha_ff5_mom_main.pdf"),
+            width = 8, height = 5, unit = "in", scale = scale_gg)
+    
+        # Appendix ====
+      
+        mn_appendix <- plot_base_appendix + geom_line(aes(y = rbar)) + 
+            geom_point(aes(y = rbar)) +
+            scale_y_continuous(breaks = seq(0, 50, 10), limits=c(-5,55)) +
+            ylab("Annualized Mean Return (%)")
+        stdev_appendix <- plot_base_appendix + geom_line(aes(y = vol)) +
+            geom_point(aes(y = vol)) +
+            ylab("Annualized Std. Dev. (%)") 
+        sharpe_appendix <- plot_base_appendix + geom_line(aes(y = sharpe)) + 
+            geom_point(aes(y = sharpe)) +
+            scale_y_continuous(breaks = seq(0, 3, 0.5), limits=c(-0.25,3.25)) +
+            ylab("Annualized Sharpe Ratio") 
+        alpha_capm_appendix <- plot_base_appendix + geom_line(aes(y = alpha_capm)) +
+            geom_point(aes(y = alpha_capm)) +
+            ylab('Annualized CAPM Alpha (%)')
+        alpha_ff5_appendix <- plot_base_appendix + geom_line(aes(y = alpha_ff5)) +
+            geom_point(aes(y = alpha_ff5)) +
+            ylab('Annualized FF5 + Mom Alpha (%)')
+      
+        ggsave(plot = mn_appendix,
+            filename = paste0(plot_path, cur_fore, "_", cur_firmset,"_expected_rets_appendix.pdf"),
+            width = 8, height = 5, unit = "in", scale = scale_gg)
+      
+        ggsave(plot = sharpe_appendix, 
+            filename = paste0(plot_path, cur_fore, "_", cur_firmset,"_sharpes_appendix.pdf"),
+            width = 8, height = 5, unit = "in", scale = scale_gg)
+        
+        ggsave(plot = alpha_capm_appendix,
+            filename = paste0(plot_path, cur_fore, "_", cur_firmset,"_alpha_capm_appendix.pdf"),
+            width = 8, height = 5, unit = "in", scale = scale_gg)
+        
+        ggsave(plot = alpha_ff5_appendix, 
+            filename = paste0(plot_path, cur_fore, "_", cur_firmset,"_alpha_ff5_mom_appendix.pdf"),
+            width = 8, height = 5, unit = "in", scale = scale_gg)
+        
     }
-
-    # Elements common to all plots
-    common_theme <- theme_bw() + 
-        theme(
-            legend.position = pos,
-            legend.background = element_blank(),
-            legend.key = element_blank(),
-            legend.spacing.y = unit(0.005, 'cm'),
-            legend.spacing.x = unit(0.06, 'cm'),
-            legend.box = 'horizontal',
-            legend.key.width = unit(0.55, 'cm'),
-            legend.key.height = unit(0.38, 'cm'),
-            legend.text = element_text(size = 6),
-            legend.title = element_text(size = 7)
-        )
-  
-    # All the line plots will have same basic look
-    plot_base_main <- ggplot(
-            sum_data[forecast == cur_fore & imp != "BLLP loc B-XS"], 
-            aes(x = pc, colour = weighting, shape = weighting, linetype = imp)
-        ) + 
-        common_theme  +
-        guides(
-          colour = guide_legend(order = 1),
-          shape = guide_legend(order = 1),
-          linetype = guide_legend(order = 2)
-        ) +
-        scale_linetype_manual(values = c('solid', 'twodash', 'dotted')) +
-        scale_size_manual(values = c(0.8, 0.8, 0.5)) +
-        scale_color_manual(values = c(MATRED, MATBLUE)) + 
-        labs(
-          colour = "Stock Weights",
-          linetype = "Imputation",
-          shape = "Stock Weights",
-          x = "Number of PCs"
-        )
-    plot_base_appendix <- ggplot(
-            sum_data[forecast == cur_fore], 
-            aes(x = pc, colour = weighting, shape = weighting, linetype = imp)
-        ) + 
-        common_theme  +
-        guides(
-          colour = guide_legend(order = 1),
-          shape = guide_legend(order = 1),
-          linetype = guide_legend(order = 2)
-        ) +
-        scale_linetype_manual(values = c('solid', 'twodash', 'dotted')) +
-        scale_size_manual(values = c(0.8, 0.8, 0.5)) +
-        scale_color_manual(values = c(MATRED, MATBLUE)) + 
-        labs(
-          colour = "Stock Weights",
-          linetype = "Imputation",
-          shape = "Stock Weights",
-          x = "Number of PCs"
-        )
-
-    # Main figure plots ====
-  
-    mn_main <- plot_base_main + 
-        geom_line(aes(y = rbar)) + 
-        geom_point(aes(y = rbar)) + 
-        scale_y_continuous(breaks = seq(0, 50, 10), limits=c(-5,55)) +
-        ylab("Annualized Mean Return (%)")
-    stdev_main <- plot_base_main + geom_line(aes(y = vol)) +
-        geom_point(aes(y = vol)) + 
-        ylab("Annualized Std. Dev. (%)") 
-    sharpe_main <- plot_base_main + geom_line(aes(y = sharpe)) + 
-        geom_point(aes(y = sharpe)) + 
-        scale_y_continuous(breaks = seq(0, 3, 0.5), limits=c(-0.25,3.25)) +
-        ylab("Annualized Sharpe Ratio") 
-    alpha_capm_main <- plot_base_main + geom_line(aes(y = alpha_capm)) +
-        geom_point(aes(y = alpha_capm)) + 
-        ylab('Annualized CAPM Alpha (%)')
-    alpha_ff5_main <- plot_base_main + geom_line(aes(y = alpha_ff5)) +
-        geom_point(aes(y = alpha_ff5)) + 
-        ylab('Annualized FF5 + Mom Alpha (%)')
-  
-    ggsave(plot = mn_main,
-        filename = paste0(plot_path, cur_fore, "_expected_rets_main.pdf"),
-        width = 8, height = 5, unit = "in", scale = scale_gg)
-  
-    ggsave(plot = sharpe_main, 
-        filename = paste0(plot_path, cur_fore, "_sharpes_main.pdf"),
-        width = 8, height = 5, unit = "in", scale = scale_gg)
-    
-    ggsave(plot = alpha_capm_main,
-        filename = paste0(plot_path, cur_fore, "_alpha_capm_main.pdf"),
-        width = 8, height = 5, unit = "in", scale = scale_gg)
-    
-    ggsave(plot = alpha_ff5_main, 
-        filename = paste0(plot_path, cur_fore, "_alpha_ff5_mom_main.pdf"),
-        width = 8, height = 5, unit = "in", scale = scale_gg)
-
-    # Appendix ====
-  
-    mn_appendix <- plot_base_appendix + geom_line(aes(y = rbar)) + 
-        geom_point(aes(y = rbar)) +
-        scale_y_continuous(breaks = seq(0, 50, 10), limits=c(-5,55)) +
-        ylab("Annualized Mean Return (%)")
-    stdev_appendix <- plot_base_appendix + geom_line(aes(y = vol)) +
-        geom_point(aes(y = vol)) +
-        ylab("Annualized Std. Dev. (%)") 
-    sharpe_appendix <- plot_base_appendix + geom_line(aes(y = sharpe)) + 
-        geom_point(aes(y = sharpe)) +
-        scale_y_continuous(breaks = seq(0, 3, 0.5), limits=c(-0.25,3.25)) +
-        ylab("Annualized Sharpe Ratio") 
-    alpha_capm_appendix <- plot_base_appendix + geom_line(aes(y = alpha_capm)) +
-        geom_point(aes(y = alpha_capm)) +
-        ylab('Annualized CAPM Alpha (%)')
-    alpha_ff5_appendix <- plot_base_appendix + geom_line(aes(y = alpha_ff5)) +
-        geom_point(aes(y = alpha_ff5)) +
-        ylab('Annualized FF5 + Mom Alpha (%)')
-  
-    ggsave(plot = mn_appendix,
-        filename = paste0(plot_path, cur_fore, "_expected_rets_appendix.pdf"),
-        width = 8, height = 5, unit = "in", scale = scale_gg)
-  
-    ggsave(plot = sharpe_appendix, 
-        filename = paste0(plot_path, cur_fore, "_sharpes_appendix.pdf"),
-        width = 8, height = 5, unit = "in", scale = scale_gg)
-    
-    ggsave(plot = alpha_capm_appendix,
-        filename = paste0(plot_path, cur_fore, "_alpha_capm_appendix.pdf"),
-        width = 8, height = 5, unit = "in", scale = scale_gg)
-    
-    ggsave(plot = alpha_ff5_appendix, 
-        filename = paste0(plot_path, cur_fore, "_alpha_ff5_mom_appendix.pdf"),
-        width = 8, height = 5, unit = "in", scale = scale_gg)
-    
 }
 
 # Cumulative returns over time ----
 
-cumret_plot <- ggplot(
-    ret[pc %in% c(3, 5, max(ret$pc)) & forecast == 'pca'],
-    aes(x = yyyymm, y = cumret)
-  ) +
-  geom_line(aes(colour = factor(pc), linetype = paste0(weighting, ", ", imp))) + 
-  theme_bw() + 
-  labs(
-    x = "Month",
-    y = "ln(1 + cumulative mean return)",
-    colour = "Number of PCs",
-    linetype = "Weighting",
-    title = "Hedge portfolio returns over time"
-  ) + 
-  theme(
-    legend.position = c(0.2, 0.8),
-    legend.background = element_blank(),
-    legend.key = element_blank()
-  )
-
-# check
-ret %>% 
-  group_by(weighting, forecast, imp, pc) %>% 
-  summarize(
-    rbar = mean(ls_ret)
-  ) %>% 
-  pivot_wider(names_from = 'forecast', values_from = 'rbar') %>% 
-  print(n=100)
+#cumret_plot <- ggplot(
+#        ret[pc %in% c(3, 5, max(ret$pc)) & forecast == 'pca'],
+#        aes(x = yyyymm, y = cumret)
+#    ) +
+#    geom_line(aes(colour = factor(pc), linetype = paste0(weighting, ", ", imp))) + 
+#    theme_bw() + 
+#    labs(
+#        x = "Month",
+#        y = "ln(1 + cumulative mean return)",
+#        colour = "Number of PCs",
+#        linetype = "Weighting",
+#        title = "Hedge portfolio returns over time"
+#    ) + 
+#    theme(
+#        legend.position = c(0.2, 0.8),
+#        legend.background = element_blank(),
+#        legend.key = element_blank()
+#    )
+#
+## check
+#ret %>% 
+#    group_by(weighting, forecast, imp, pc) %>% 
+#    summarize(
+#        rbar = mean(ls_ret)
+#    ) %>% 
+#    pivot_wider(names_from = 'forecast', values_from = 'rbar') %>% 
+#    print(n=100)

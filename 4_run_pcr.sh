@@ -4,7 +4,7 @@
 user_email="$USER@gsb.columbia.edu"
 
 # Parameters to control the jobs
-start_yr=1995
+start_yr=1996
 end_yr=2021
 
 # Parameters for principal component regressions
@@ -20,9 +20,9 @@ sample_start_yr=$(($start_yr-$n_years))
 # These take up so much memory that I need to do one year at a time
 # But they each run relatively quickly
 for _yr in $(eval echo "{$start_yr..$end_yr}"); do
-    for imp in "none"; do
-        for forecast in "pca"; do 
-            for firmset in "micro" "small" "big"; do
+    for imp in "em" "none" "bllp6"; do
+        for forecast in "spca" "pca"; do 
+            for firmset in "micro" "small" "big" "all"; do
             
                 if [ $forecast = "pca" ]; then
                     scaled_pca="FALSE"
@@ -33,7 +33,7 @@ for _yr in $(eval echo "{$start_yr..$end_yr}"); do
                 # Run the PCR for the given imputation and forecast type
                 Rscript --grid_submit=batch \
                     --grid_ncpus=12 \
-                    --grid_mem=50G \
+                    --grid_mem=200G \
                     --grid_SGE_TASK_ID=1-12 \
                     --grid_email=$user_email \
                     4a_pcr.R \
