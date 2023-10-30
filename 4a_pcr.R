@@ -198,8 +198,9 @@ rm(signals, pc) # Memory
 ncores <- floor(parallel::detectCores()*opt$cores_frac)
 doParallel::registerDoParallel(cores = ncores)
 
+# Hardcode in to do at least 25 PCs granularly for finer plot
 pcr_pred <- foreach::"%dopar%"(foreach::foreach(
-    j = unique(c(1:ifelse(10 < n_pcs, 10, n_pcs), seq(opt$skip_n, n_pcs, opt$skip_n), n_pcs)), 
+    j = unique(c(1:ifelse(25 < n_pcs, 25, n_pcs), seq(opt$skip_n, n_pcs, opt$skip_n), n_pcs)), 
     .packages = c('data.table','zoo')
 ), {
 
