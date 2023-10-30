@@ -196,7 +196,7 @@ for (cur_firmset in firmset_list) {
         if (cur_fore == "pca") {
             pos <- c(75, 63)/100
         } else {
-            pos <- c(75, 66)/100
+            pos <- c(75, 62)/100
         }
     
         # Elements common to all plots
