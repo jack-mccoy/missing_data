@@ -265,19 +265,10 @@ for (cur_firmset in firmset_list) {
             geom_point(aes(y = rbar)) + 
             scale_y_continuous(breaks = seq(0, 50, 10), limits=c(-5,55)) +
             ylab("Annualized Mean Return (%)")
-        stdev_main <- plot_base_main + geom_line(aes(y = vol)) +
-            geom_point(aes(y = vol)) + 
-            ylab("Annualized Std. Dev. (%)") 
         sharpe_main <- plot_base_main + geom_line(aes(y = sharpe)) + 
             geom_point(aes(y = sharpe)) + 
             scale_y_continuous(breaks = seq(0, 3, 0.5), limits=c(-0.25,3.25)) +
             ylab("Annualized Sharpe Ratio") 
-        alpha_capm_main <- plot_base_main + geom_line(aes(y = alpha_capm)) +
-            geom_point(aes(y = alpha_capm)) + 
-            ylab('Annualized CAPM Alpha (%)')
-        alpha_ff5_main <- plot_base_main + geom_line(aes(y = alpha_ff5)) +
-            geom_point(aes(y = alpha_ff5)) + 
-            ylab('Annualized FF5 + Mom Alpha (%)')
       
         ggsave(plot = mn_main,
             filename = paste0(plot_path, cur_fore, "_", cur_firmset, "_expected_rets_main.pdf"),
@@ -286,14 +277,6 @@ for (cur_firmset in firmset_list) {
         ggsave(plot = sharpe_main, 
             filename = paste0(plot_path, cur_fore, "_", cur_firmset,"_sharpes_main.pdf"),
             width = 8, height = 5, unit = "in", scale = scale_gg)
-        
-        ggsave(plot = alpha_capm_main,
-            filename = paste0(plot_path, cur_fore, "_", cur_firmset,"_alpha_capm_main.pdf"),
-            width = 8, height = 5, unit = "in", scale = scale_gg)
-        
-        ggsave(plot = alpha_ff5_main, 
-            filename = paste0(plot_path, cur_fore, "_", cur_firmset,"_alpha_ff5_mom_main.pdf"),
-            width = 8, height = 5, unit = "in", scale = scale_gg)
     
         # Appendix ====
       
@@ -301,19 +284,10 @@ for (cur_firmset in firmset_list) {
             geom_point(aes(y = rbar)) +
             scale_y_continuous(breaks = seq(0, 50, 10), limits=c(-5,55)) +
             ylab("Annualized Mean Return (%)")
-        stdev_appendix <- plot_base_appendix + geom_line(aes(y = vol)) +
-            geom_point(aes(y = vol)) +
-            ylab("Annualized Std. Dev. (%)") 
         sharpe_appendix <- plot_base_appendix + geom_line(aes(y = sharpe)) + 
             geom_point(aes(y = sharpe)) +
             scale_y_continuous(breaks = seq(0, 3, 0.5), limits=c(-0.25,3.25)) +
             ylab("Annualized Sharpe Ratio") 
-        alpha_capm_appendix <- plot_base_appendix + geom_line(aes(y = alpha_capm)) +
-            geom_point(aes(y = alpha_capm)) +
-            ylab('Annualized CAPM Alpha (%)')
-        alpha_ff5_appendix <- plot_base_appendix + geom_line(aes(y = alpha_ff5)) +
-            geom_point(aes(y = alpha_ff5)) +
-            ylab('Annualized FF5 + Mom Alpha (%)')
       
         ggsave(plot = mn_appendix,
             filename = paste0(plot_path, cur_fore, "_", cur_firmset,"_expected_rets_appendix.pdf"),
@@ -323,43 +297,6 @@ for (cur_firmset in firmset_list) {
             filename = paste0(plot_path, cur_fore, "_", cur_firmset,"_sharpes_appendix.pdf"),
             width = 8, height = 5, unit = "in", scale = scale_gg)
         
-        ggsave(plot = alpha_capm_appendix,
-            filename = paste0(plot_path, cur_fore, "_", cur_firmset,"_alpha_capm_appendix.pdf"),
-            width = 8, height = 5, unit = "in", scale = scale_gg)
-        
-        ggsave(plot = alpha_ff5_appendix, 
-            filename = paste0(plot_path, cur_fore, "_", cur_firmset,"_alpha_ff5_mom_appendix.pdf"),
-            width = 8, height = 5, unit = "in", scale = scale_gg)
-        
     }
 }
 
-# Cumulative returns over time ----
-
-#cumret_plot <- ggplot(
-#        ret[pc %in% c(3, 5, max(ret$pc)) & forecast == 'pca'],
-#        aes(x = yyyymm, y = cumret)
-#    ) +
-#    geom_line(aes(colour = factor(pc), linetype = paste0(weighting, ", ", imp))) + 
-#    theme_bw() + 
-#    labs(
-#        x = "Month",
-#        y = "ln(1 + cumulative mean return)",
-#        colour = "Number of PCs",
-#        linetype = "Weighting",
-#        title = "Hedge portfolio returns over time"
-#    ) + 
-#    theme(
-#        legend.position = c(0.2, 0.8),
-#        legend.background = element_blank(),
-#        legend.key = element_blank()
-#    )
-#
-## check
-#ret %>% 
-#    group_by(weighting, forecast, imp, pc) %>% 
-#    summarize(
-#        rbar = mean(ls_ret)
-#    ) %>% 
-#    pivot_wider(names_from = 'forecast', values_from = 'rbar') %>% 
-#    print(n=100)
