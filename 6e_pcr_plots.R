@@ -31,6 +31,12 @@ imp_names <- setNames(
     c("em","none","bllp6")
 )
 
+# The "zoomed-in" PC range at the left
+vec_zoomed_in <- 1:25
+
+# Number of PCs to skip for "zoomed out" range
+zoom_out_skip <- 10
+
 #===============================================================================#
 # Pull in and format data ----
 #===============================================================================#
@@ -129,18 +135,6 @@ ret <- melt(ls_ports,
     variable.name = "weighting",
     value.name = "ls_ret")
 
-## Mean portfolios for each leg
-#ports_mean <- ports[, 
-#    .(ew = mean(ew), vw = mean(vw)),
-#    by = .(forecast, imp, firmset, decile, pc)
-#]
-#
-## Long-short portfolios (annualized)
-#ls_ports_mean <- ports_mean[, 
-#    .(ew = 12*sum(ew), vw = 12*sum(vw)),
-#    by = .(forecast, imp, firmset, pc)
-#]
-
 # cumulative returns
 ret[
     order(forecast, imp, weighting, pc, firmset, yyyymm),
@@ -183,120 +177,160 @@ sum_data[, weighting := dplyr::case_when(
 # Plots
 #===============================================================================#
 
-# Aggregate plots ----
 scale_gg <- 0.55
-Npc_max <- 80 
 
+# Loop through different forecasts (pca and spca) and firm sets (all vs. separate)
 fore_list <- unique(sum_data$forecast)
 firmset_list <- unique(sum_data$firmset)
 
+# the "zoomed out" PC range
+zooms <- list(
+    'out' = unique(c(
+        1, # one-PC model
+        seq(zoom_out_skip, max(sum_data$pc), zoom_out_skip), # Every X PCs
+        max(sum_data$pc)) # max PC model
+    ),
+    'in' = 1:25
+)
+
 for (cur_firmset in firmset_list) {
     for (cur_fore in fore_list) {
+        for (zoom in names(zooms)) {
     
-        if (cur_fore == "pca") {
-            pos <- c(75, 63)/100
-        } else {
-            pos <- c(75, 62)/100
+            if (zoom == "out") {
+                pos <- c(75, 62)/100
+            } else {
+                pos <- c(25, 85)/100
+            }
+    
+            # Elements common to all plots
+            common_theme <- theme_bw() + 
+                theme(
+                    legend.position = pos,
+                    legend.background = element_blank(),
+                    legend.key = element_blank(),
+                    legend.spacing.y = unit(0.005, 'cm'),
+                    legend.spacing.x = unit(0.06, 'cm'),
+                    legend.box = 'horizontal',
+                    legend.key.width = unit(0.55, 'cm'),
+                    legend.key.height = unit(0.38, 'cm'),
+                    legend.text = element_text(size = 6),
+                    legend.title = element_text(size = 7)
+                )
+      
+            # All the line plots will have same basic look
+            plot_base_main <- ggplot(
+                    sum_data[
+                        pc %in% zooms[[zoom]] &
+                        forecast == cur_fore &
+                        firmset == cur_firmset & 
+                        imp != "BLLP loc B-XS"
+                    ], 
+                    aes(x = pc, colour = weighting, shape = weighting, linetype = imp)
+                ) + 
+                common_theme  +
+                guides(
+                    colour = guide_legend(order = 1),
+                    shape = guide_legend(order = 1),
+                    linetype = guide_legend(order = 2)
+                ) +
+                scale_linetype_manual(values = c('solid', 'twodash', 'dotted')) +
+                scale_size_manual(values = c(0.8, 0.8, 0.5)) +
+                scale_color_manual(values = c(MATRED, MATBLUE)) + 
+                labs(
+                    colour = "Stock Weights",
+                    linetype = "Imputation",
+                    shape = "Stock Weights",
+                    x = "Number of PCs"
+                )
+            plot_base_appendix <- ggplot(
+                    sum_data[
+                        pc %in% zooms[[zoom]] &
+                        forecast == cur_fore &
+                        firmset == cur_firmset
+                    ], 
+                    aes(x = pc, colour = weighting, shape = weighting, linetype = imp)
+                ) + 
+                common_theme  +
+                guides(
+                    colour = guide_legend(order = 1),
+                    shape = guide_legend(order = 1),
+                    linetype = guide_legend(order = 2)
+                ) +
+                scale_linetype_manual(values = c('solid', 'twodash', 'dotted')) +
+                scale_size_manual(values = c(0.8, 0.8, 0.5)) +
+                scale_color_manual(values = c(MATRED, MATBLUE)) + 
+                labs(
+                    colour = "Stock Weights",
+                    linetype = "Imputation",
+                    shape = "Stock Weights",
+                    x = "Number of PCs"
+                )
+    
+            # Main figure plots ====
+
+            mn_y <- scale_y_continuous(breaks = seq(0, 50, 10), limits=c(-5,55))
+            if (zoom == "out") {
+                mn_pt <- geom_point(aes(y = rbar))
+                sharpe_pt <- geom_point(aes(y = sharpe))
+                sharpe_y <- scale_y_continuous(breaks = seq(0, 3, 0.5), limits=c(-0.25,3.25))
+            } else {
+                mn_pt <- NULL
+                sharpe_pt <- NULL
+                if (cur_fore == "pca") {
+                    sharpe_y <- scale_y_continuous(breaks = seq(0, 2, 0.4), limits=c(-0.1,2.1))
+                } else {
+                    sharpe_y <- scale_y_continuous(breaks = seq(0, 3, 0.5), limits=c(-0.25,3.25))
+                }
+                #mn_y <- scale_y_continuous(breaks = seq(0, 20, 4), limits=c(-5,25))
+            }
+      
+            mn_main <- plot_base_main + 
+                geom_line(aes(y = rbar)) + 
+                mn_pt + 
+                mn_y +
+                ylab("Annualized Mean Return (%)")
+            sharpe_main <- plot_base_main + geom_line(aes(y = sharpe)) + 
+                sharpe_pt + 
+                sharpe_y +
+                ylab("Annualized Sharpe Ratio") 
+      
+            ggsave(plot = mn_main,
+                filename = paste0(plot_path, 
+                    cur_fore, "_", cur_firmset, "_zoom", zoom, 
+                    "_expected_rets_main.pdf"),
+                width = 8, height = 5, unit = "in", scale = scale_gg)
+      
+            ggsave(plot = sharpe_main, 
+                filename = paste0(plot_path, 
+                    cur_fore, "_", cur_firmset, "_zoom", zoom, 
+                    "_sharpes_main.pdf"),
+                width = 8, height = 5, unit = "in", scale = scale_gg)
+    
+            # Appendix ====
+      
+            mn_appendix <- plot_base_appendix + geom_line(aes(y = rbar)) + 
+                mn_pt +
+                mn_y +
+                ylab("Annualized Mean Return (%)")
+            sharpe_appendix <- plot_base_appendix + geom_line(aes(y = sharpe)) + 
+                sharpe_pt +
+                sharpe_y +
+                ylab("Annualized Sharpe Ratio") 
+      
+            ggsave(plot = mn_appendix,
+                filename = paste0(plot_path, 
+                    cur_fore, "_", cur_firmset, "_zoom", zoom,
+                    "_expected_rets_appendix.pdf"),
+                width = 8, height = 5, unit = "in", scale = scale_gg)
+      
+            ggsave(plot = sharpe_appendix, 
+                filename = paste0(plot_path, 
+                    cur_fore, "_", cur_firmset, "_zoom", zoom,
+                    "_sharpes_appendix.pdf"),
+                width = 8, height = 5, unit = "in", scale = scale_gg)
+            
         }
-    
-        # Elements common to all plots
-        common_theme <- theme_bw() + 
-            theme(
-                legend.position = pos,
-                legend.background = element_blank(),
-                legend.key = element_blank(),
-                legend.spacing.y = unit(0.005, 'cm'),
-                legend.spacing.x = unit(0.06, 'cm'),
-                legend.box = 'horizontal',
-                legend.key.width = unit(0.55, 'cm'),
-                legend.key.height = unit(0.38, 'cm'),
-                legend.text = element_text(size = 6),
-                legend.title = element_text(size = 7)
-            )
-      
-        # All the line plots will have same basic look
-        plot_base_main <- ggplot(
-                sum_data[
-                    forecast == cur_fore &
-                    firmset == cur_firmset & 
-                    imp != "BLLP loc B-XS"
-                ], 
-                aes(x = pc, colour = weighting, shape = weighting, linetype = imp)
-            ) + 
-            common_theme  +
-            guides(
-                colour = guide_legend(order = 1),
-                shape = guide_legend(order = 1),
-                linetype = guide_legend(order = 2)
-            ) +
-            scale_linetype_manual(values = c('solid', 'twodash', 'dotted')) +
-            scale_size_manual(values = c(0.8, 0.8, 0.5)) +
-            scale_color_manual(values = c(MATRED, MATBLUE)) + 
-            labs(
-                colour = "Stock Weights",
-                linetype = "Imputation",
-                shape = "Stock Weights",
-                x = "Number of PCs"
-            )
-        plot_base_appendix <- ggplot(
-                sum_data[forecast == cur_fore & firmset == cur_firmset], 
-                aes(x = pc, colour = weighting, shape = weighting, linetype = imp)
-            ) + 
-            common_theme  +
-            guides(
-                colour = guide_legend(order = 1),
-                shape = guide_legend(order = 1),
-                linetype = guide_legend(order = 2)
-            ) +
-            scale_linetype_manual(values = c('solid', 'twodash', 'dotted')) +
-            scale_size_manual(values = c(0.8, 0.8, 0.5)) +
-            scale_color_manual(values = c(MATRED, MATBLUE)) + 
-            labs(
-                colour = "Stock Weights",
-                linetype = "Imputation",
-                shape = "Stock Weights",
-                x = "Number of PCs"
-            )
-    
-        # Main figure plots ====
-      
-        mn_main <- plot_base_main + 
-            geom_line(aes(y = rbar)) + 
-            geom_point(aes(y = rbar)) + 
-            scale_y_continuous(breaks = seq(0, 50, 10), limits=c(-5,55)) +
-            ylab("Annualized Mean Return (%)")
-        sharpe_main <- plot_base_main + geom_line(aes(y = sharpe)) + 
-            geom_point(aes(y = sharpe)) + 
-            scale_y_continuous(breaks = seq(0, 3, 0.5), limits=c(-0.25,3.25)) +
-            ylab("Annualized Sharpe Ratio") 
-      
-        ggsave(plot = mn_main,
-            filename = paste0(plot_path, cur_fore, "_", cur_firmset, "_expected_rets_main.pdf"),
-            width = 8, height = 5, unit = "in", scale = scale_gg)
-      
-        ggsave(plot = sharpe_main, 
-            filename = paste0(plot_path, cur_fore, "_", cur_firmset,"_sharpes_main.pdf"),
-            width = 8, height = 5, unit = "in", scale = scale_gg)
-    
-        # Appendix ====
-      
-        mn_appendix <- plot_base_appendix + geom_line(aes(y = rbar)) + 
-            geom_point(aes(y = rbar)) +
-            scale_y_continuous(breaks = seq(0, 50, 10), limits=c(-5,55)) +
-            ylab("Annualized Mean Return (%)")
-        sharpe_appendix <- plot_base_appendix + geom_line(aes(y = sharpe)) + 
-            geom_point(aes(y = sharpe)) +
-            scale_y_continuous(breaks = seq(0, 3, 0.5), limits=c(-0.25,3.25)) +
-            ylab("Annualized Sharpe Ratio") 
-      
-        ggsave(plot = mn_appendix,
-            filename = paste0(plot_path, cur_fore, "_", cur_firmset,"_expected_rets_appendix.pdf"),
-            width = 8, height = 5, unit = "in", scale = scale_gg)
-      
-        ggsave(plot = sharpe_appendix, 
-            filename = paste0(plot_path, cur_fore, "_", cur_firmset,"_sharpes_appendix.pdf"),
-            width = 8, height = 5, unit = "in", scale = scale_gg)
-        
     }
 }
 
