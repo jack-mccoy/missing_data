@@ -269,20 +269,19 @@ for (cur_firmset in firmset_list) {
     
             # Main figure plots ====
 
+            mn_pt <- geom_point(aes(y = rbar))
+            sharpe_pt <- geom_point(aes(y = sharpe))
             mn_y <- scale_y_continuous(breaks = seq(0, 50, 10), limits=c(-5,55))
             if (zoom == "out") {
-                mn_pt <- geom_point(aes(y = rbar))
-                sharpe_pt <- geom_point(aes(y = sharpe))
                 sharpe_y <- scale_y_continuous(breaks = seq(0, 3, 0.5), limits=c(-0.25,3.25))
             } else {
-                mn_pt <- NULL
-                sharpe_pt <- NULL
+                mn_pt <- geom_point(aes(y = rbar))
+                sharpe_pt <- geom_point(aes(y = sharpe))
                 if (cur_fore == "pca") {
                     sharpe_y <- scale_y_continuous(breaks = seq(0, 2, 0.4), limits=c(-0.1,2.1))
                 } else {
                     sharpe_y <- scale_y_continuous(breaks = seq(0, 3, 0.5), limits=c(-0.25,3.25))
                 }
-                #mn_y <- scale_y_continuous(breaks = seq(0, 20, 4), limits=c(-5,25))
             }
       
             mn_main <- plot_base_main + 
@@ -294,6 +293,12 @@ for (cur_firmset in firmset_list) {
                 sharpe_pt + 
                 sharpe_y +
                 ylab("Annualized Sharpe Ratio") 
+            alpha_capm_main <- plot_base_main + geom_line(aes(y = alpha_capm)) +
+                geom_point(aes(y = alpha_capm)) + 
+                ylab('Annualized CAPM Alpha (%)')
+            alpha_ff5_main <- plot_base_main + geom_line(aes(y = alpha_ff5)) +
+                geom_point(aes(y = alpha_ff5)) + 
+                ylab('Annualized FF5 + Mom Alpha (%)')
       
             ggsave(plot = mn_main,
                 filename = paste0(plot_path, 
@@ -306,6 +311,18 @@ for (cur_firmset in firmset_list) {
                     cur_fore, "_", cur_firmset, "_zoom", zoom, 
                     "_sharpes_main.pdf"),
                 width = 8, height = 5, unit = "in", scale = scale_gg)
+
+            ggsave(plot = alpha_capm_main,
+                filename = paste0(plot_path, 
+                    cur_fore, "_", cur_firmset, "_zoom", zoom, 
+                    "_alpha_capm_main.pdf"),
+                width = 8, height = 5, unit = "in", scale = scale_gg)
+      
+            ggsave(plot = alpha_ff5_main, 
+                filename = paste0(plot_path, 
+                    cur_fore, "_", cur_firmset, "_zoom", zoom, 
+                    "_alpha_ff5_main.pdf"),
+                width = 8, height = 5, unit = "in", scale = scale_gg)
     
             # Appendix ====
       
@@ -317,6 +334,12 @@ for (cur_firmset in firmset_list) {
                 sharpe_pt +
                 sharpe_y +
                 ylab("Annualized Sharpe Ratio") 
+            alpha_capm_appendix <- plot_base_appendix + geom_line(aes(y = alpha_capm)) +
+                geom_point(aes(y = alpha_capm)) + 
+                ylab('Annualized CAPM Alpha (%)')
+            alpha_ff5_appendix <- plot_base_appendix + geom_line(aes(y = alpha_ff5)) +
+                geom_point(aes(y = alpha_ff5)) + 
+                ylab('Annualized FF5 + Mom Alpha (%)')
       
             ggsave(plot = mn_appendix,
                 filename = paste0(plot_path, 
@@ -328,6 +351,18 @@ for (cur_firmset in firmset_list) {
                 filename = paste0(plot_path, 
                     cur_fore, "_", cur_firmset, "_zoom", zoom,
                     "_sharpes_appendix.pdf"),
+                width = 8, height = 5, unit = "in", scale = scale_gg)
+
+            ggsave(plot = alpha_capm_appendix,
+                filename = paste0(plot_path, 
+                    cur_fore, "_", cur_firmset, "_zoom", zoom, 
+                    "_alpha_capm_appendix.pdf"),
+                width = 8, height = 5, unit = "in", scale = scale_gg)
+      
+            ggsave(plot = alpha_ff5_appendix, 
+                filename = paste0(plot_path, 
+                    cur_fore, "_", cur_firmset, "_zoom", zoom, 
+                    "_alpha_ff5_appendix.pdf"),
                 width = 8, height = 5, unit = "in", scale = scale_gg)
             
         }
