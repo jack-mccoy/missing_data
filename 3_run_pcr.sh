@@ -36,7 +36,7 @@ for _yr in $(eval echo "{$start_yr..$end_yr}"); do
                     --grid_mem=200G \
                     --grid_SGE_TASK_ID=1-12 \
                     --grid_email=$user_email \
-                    4a_pcr.R \
+                    3a_pcr.R \
                         --signal_file="bcsignals_${imp}.csv" \
                         --scaled_pca=$scaled_pca \
                         --iter_year=$_yr \

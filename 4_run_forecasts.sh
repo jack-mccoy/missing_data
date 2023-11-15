@@ -21,7 +21,7 @@ for mod in ${mods[@]}; do
                 --grid_submit=batch \
                 --grid_email="$USER@gsb.columbia.edu" \
                 --grid_mem=75G \
-                5a_one_forecast.R \
+                4a_one_forecast.R \
                     --model=$mod \
                     --signal_file="bcsignals_${imp}.csv" \
                     --firmset=$firmset \
