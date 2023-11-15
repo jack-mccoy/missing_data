@@ -14,12 +14,13 @@ source("functions.R")
 #==============================================================================#
 
 # where we're pulling data and storing plots 
-data_path <- "../output/"
-ests_path <- paste0(data_path, "impute_ests/")
-plot_path <- paste0(data_path, "plots/")
+getFilePaths()
+data_path <- FILEPATHS$data_path
+ests_path <- paste0(FILEPATHS$out_path, "em_corrs/regular/")
+plot_path <- paste0(FILEPATHS$out_path, "plots/")
 
 # input files
-data_file <- paste0(data_path, "/bcsignals/bcsignals_none.csv")
+data_file <- paste0(data_path, "bcsignals/bcsignals_none.csv")
 
 # dates to get beta distributions for
 dates <- as.yearmon(c("Jun 1990", "Jun 2000", "Jun 2010"))
@@ -35,8 +36,11 @@ covs <- lapply(dates, function(dd) {
     dd_file <- gsub(" ", "", dd)
 
     # Return the covariance matrix to list 
-    as.matrix(read.csv(paste0(ests_path, "estR_", dd_file, ".csv"), 
+    tmp <- as.matrix(read.csv(paste0(ests_path, "estR_", dd_file, ".csv"), 
         row.names = 1))
+    tmp[upper.tri(tmp)] <- t(tmp)[upper.tri(t(tmp))] # Stored as lower tri
+
+    return(tmp)
 })
 names(covs) <- dates
 
@@ -59,7 +63,7 @@ for (dd in 1:length(dates)) {
 names(beta_lists) <- dates
 
 # basically just reducing the betas down to one huge vector per month 
-# to plot a histogram
+# to plot a density
 beta_lists <- lapply(beta_lists, function(x) lapply(x, as.vector))
 all_the_betas <- lapply(beta_lists, function(x) Reduce(c, x))
 all_the_betas <- lapply(all_the_betas, as.data.table)
@@ -77,41 +81,37 @@ rm(beta_lists, all_the_betas)
 
 # make the density plot of the beta values
 beta_dist <- ggplot(data = beta_dt, aes(x = V1, group = month)) + 
-  geom_density(aes(colour = month, linetype = month), size = 1) +
-  labs(
-    x = "Imputation Slope",
-    y = "Density",
-    color = "Month",
-    linetype = "Month"
-  ) + 
-  scale_x_continuous(
-    limits = c(-1,1),
-    breaks = seq(-1,1,0.25)
-  ) + 
-  scale_y_continuous(
-    expand = expand_scale(mult = c(0,0.05), add = 0),
-    breaks = seq(0,10,2)
-  ) +
-  theme_bw() + 
-  theme(
-    legend.position = c(0.8, 0.8),
-    legend.title = element_blank(),
-    legend.box.background = element_rect(colour = "black"),
-    panel.grid = element_line(colour = "grey", size = 0.2),
-    axis.text = element_text(size = 13),
-    text = element_text(size = 15)
-  ) 
-
-# beta_dist
-
+    geom_density(aes(colour = month, linetype = month), size = 1) +
+    labs(
+        x = "Imputation Slope",
+        y = "Density",
+        color = "Month",
+        linetype = "Month"
+    ) + 
+    scale_x_continuous(
+        limits = c(-1,1),
+        breaks = seq(-1,1,0.25)
+    ) + 
+    scale_y_continuous(
+        expand = expand_scale(mult = c(0,0.05), add = 0),
+        breaks = seq(0,10,2)
+    ) +
+    theme_bw() + 
+    theme(
+        legend.position = c(0.8, 0.8),
+        legend.title = element_blank(),
+        legend.box.background = element_rect(colour = "black"),
+        panel.grid = element_line(colour = "grey", size = 0.2),
+        axis.text = element_text(size = 13),
+        text = element_text(size = 15)
+    ) 
 
 # Output the plots
-ggsave(plot = beta_dist
-       , filename = paste0(plot_path, "beta_dist.pdf")
-       , height = 4, width = 8, scale = 0.9
-     )
-
-
+ggsave(
+    plot = beta_dist,
+    filename = paste0(plot_path, "beta_dist.pdf"),
+    height = 4, width = 8, scale = 0.9
+)
 
 # Numbers for the text ---------------------------------------------------
 

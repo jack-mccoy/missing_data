@@ -325,3 +325,111 @@ imputeLastVal <- function(x, yrmons, k = 12) {
     }
 }
 
+getFilePaths <- function(signal_list_exists=TRUE) {
+    pathnames <- c("data_path", "out_path", "signal_list")
+    # Load file
+    if (file.exists("FILEPATHS.R")) {
+        source('FILEPATHS.R')
+        # Make sure it has a list `FILEPATHS`
+        if (exists("FILEPATHS")) {
+            # Make sure it has the right names
+            if (all(pathnames %in% names(FILEPATHS))) {
+                # If desired, make sure signal list exists (created after a few scripts)
+                if (signal_list_exists) {
+                    if (!file.exists(FILEPATHS$signal_list)) {
+                        stop("signal_list `", FILEPATHS$signal_list, "` does not exist\n", sep="")
+                    }
+                }
+                for (path in pathnames[1:2]) {
+                    if (!dir.exists(FILEPATHS[[path]])) {
+                        cat("Creating directory `", FILEPATHS[[path]], "`\n", sep = "")
+                        dir.create(FILEPATHS[[path]], showWarnings = FALSE)
+                    }
+                }
+            } else {
+                stop(
+                    "`FILEPATHS` list does not contain all of (", 
+                    paste(pathnames, collapse = ", "), ")\n",
+                    sep = ""
+                )
+            }
+        } else {
+            stop(
+                "File `FILEPATHS.R` must have list `FILEPATHS` and entries (",
+                paste(pathnames, collapse = ", "), ")\n",
+                sep = ""
+            )
+        }
+    } else {
+        stop(
+            "Must make `FILEPATHS.R` file with list `FILEPATHS` and entries (",
+            paste(pathnames, collapse = ", "), ")\n",
+            sep = ""
+        )
+    }
+}
+
+unpackSignalList <- function(signal_list) {
+    if (grepl("\\.txt", signal_list)) {
+        impute_vec <- scan(signal_list, character())
+    } else if (grepl(",", signal_list)) {
+        impute_vec <- trimws(do.call("c", strsplit(signal_list, ",")))
+    } else {
+        stop("It seems that `signal_list` is not a .txt file or comma-separated list\n")
+    }
+    return(impute_vec)
+}
+
+filterFirms <- function(DT, firmset, FILEPATHS) {
+    breakpoints <- fread(paste0(FILEPATHS$data_path, 
+        'raw/ME_Breakpoints_20_50_clean.csv'))
+    breakpoints[, ":="(
+        yyyymm = as.yearmon(yyyymm),
+        p20 = p20 * 1e3, # KF file is in millions and CRSP is in thousands
+        p50 = p50 * 1e3
+    )]
+    # Filter based on Fama and French (2008) cutoffs
+    if (firmset == "micro") {
+        out <- merge(DT, breakpoints, by = "yyyymm")[me < p20]
+    } else if (firmset == "small") {
+        out <- merge(DT, breakpoints, by = "yyyymm")[p20 <= me & me < p50]
+    } else if (firmset == "big") {
+        out <- merge(DT, breakpoints, by = "yyyymm")[p50 <= me]
+    } else {
+        stop("Did not specify `firmset` in one of (micro,small,big)\n")
+    }
+    return(out[, !c("p20", "p50")])
+}
+
+#==============================================================================
+# Large file unzip
+#==============================================================================
+decompress_file <- function(directory, file, .file_cache = FALSE) {
+
+    if (.file_cache == TRUE) {
+        print("decompression skipped")
+    } else {
+
+        # Set working directory for decompression
+        # simplifies unzip directory location behavior
+        wd <- getwd()
+        setwd(directory)
+
+        # Run decompression
+        decompression <- system2("unzip",
+            args = c("-o", file), # include override flag
+            stdout = TRUE)
+
+        file.remove(file)
+
+        # Reset working directory
+        setwd(wd); rm(wd)
+
+        # Test for success criteria
+        if (grepl("Warning message", tail(decompression, 1))) {
+            print(decompression)
+        }
+    }
+}
+
+
