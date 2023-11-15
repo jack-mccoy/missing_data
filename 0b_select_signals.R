@@ -3,8 +3,6 @@
 # the most observed 75 or whatever)
 # Andrew 2022 06
 
-# Update 2023 04: now we use the same 125 signals throughout for ease of reading.
-
 #==============================================================================#
 # Packages ----
 #==============================================================================#

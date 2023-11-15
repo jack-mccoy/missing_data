@@ -38,15 +38,6 @@ option_list <- list(
   optparse::make_option(c("--num_PCs"),
                         type = "numeric", default = 6,
                         help = "number of PCs of AC Cov to use"),
-  #optparse::make_option(c("--out_path"), # Need this flexibility. Files are too big to store in non-scratch
-  #                      type = "character", default = "../output/",
-  #                      help = "directory including input and output files"),
-  #optparse::make_option(c("--out_name"), 
-  #                      type = "character", default = "bcsignals_bllp.csv",
-  #                      help = "directory including input and output files"),  
-  #optparse::make_option(c("--impute_vec"),
-  #                      type = "character", default = "../data/signals_best125_1985.txt",
-  #                      help = "a comma-separated list of values or .txt file to scan"),
   optparse::make_option(c("--lag_max_years"),
                         type = "numeric", default = 2,
                         help = "max num years to look back for 2nd stage")

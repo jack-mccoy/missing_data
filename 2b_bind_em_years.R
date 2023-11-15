@@ -15,9 +15,6 @@ source("functions.R") # for file path function
 
 # Set up options
 option_list <- list(
-    #optparse::make_option(c("--data_path"),
-    #    type = "character", default = "../output/",
-    #    help = "data directory, assumed to have subdir `em_intermediate/`"),
     optparse::make_option(c("--em_type"),
         type = "character", default = "regular",
         help = "type of EM imputation to bind, one of (regular, ar1)"),
